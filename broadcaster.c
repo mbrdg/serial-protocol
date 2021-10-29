@@ -4,12 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
 
 #define BAUDRATE B38400
+#define MAXLEN 255
 
 volatile int STOP = 0;
 
@@ -23,7 +22,7 @@ int main(int argc, char **argv)
 
         int fd, c, res;
         struct termios oldtio, newtio;
-        char buf[255];
+        char buf[MAXLEN];
 
         /*  Open serial port device for reading and writing and not as controlling
             tty because we don't want to get killed if linenoise sends CTRL-C. */
@@ -63,9 +62,9 @@ int main(int argc, char **argv)
 
         printf("new termios structure set\n");
 
-        fgets(buf, 255, stdin);
+        fgets(buf, MAXLEN, stdin);
         const char *nl = strchr(buf, '\n');
-        c = nl ? nl - buf : 253;
+        c = nl ? nl - buf : MAXLEN - 2;
         buf[c+1] = '\0';
     
         res = write(fd, buf, strlen(buf) + 1);   

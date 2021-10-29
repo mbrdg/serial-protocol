@@ -4,12 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
 
 #define BAUDRATE B38400
+#define MAXLEN 255
 
 volatile int STOP = 0;
 
@@ -23,7 +22,7 @@ int main(int argc, char **argv)
 
         int fd, c, res;
         struct termios oldtio, newtio;
-        char buf[255];
+        char buf[MAXLEN];
 
     /*
         Open serial port device for reading and writing and not as controlling tty
@@ -72,11 +71,11 @@ int main(int argc, char **argv)
         while (!STOP)
         {       
                 res = read(fd, buf + c, sizeof(char));
-                STOP = (buf[c] == '\0' || res == 0);
+                STOP = (buf[c] == '\0' || res == 0 || c == (MAXLEN - 1));
                 c++;
         }
 
-        printf("received: %s", buf);
+        printf("%s", buf);
         printf("%d bytes read\n", c);
 
         sleep(2);
