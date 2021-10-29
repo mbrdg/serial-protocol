@@ -1,9 +1,15 @@
-/*Non-Canonical Input Processing*/
+/*
+ * broadcaster.c
+ * Non-Canonical Input Processing 
+ * RC @ L.EIC 2122
+ * Author: Miguel Rodrigues
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
 
@@ -12,11 +18,12 @@
 
 volatile int STOP = 0;
 
-int main(int argc, char **argv)
+int
+main (int argc, char **argv)
 {
         if (argc < 2)
         {
-                fprintf(stderr, "usage: %s <serial port>\n", argv[0]);
+                fprintf(stderr, "usage: %s <serialport>\n", argv[0]);
                 exit(1);
         }
 
@@ -26,17 +33,17 @@ int main(int argc, char **argv)
         /*  Open serial port device for reading and writing and not as controlling
             tty because we don't want to get killed if linenoise sends CTRL-C. */
         int fd;
-        fd = open(argv[1], O_RDWR | O_NOCTTY );
+        fd = open(argv[1], O_RDWR | O_NOCTTY);
         if (fd < 0) 
         {
-                perror(argv[1]); 
+                fprintf(stderr, "error: open() code: %d\n", errno);
                 exit(-1); 
         }
 
         /* save current port settings */
         if (tcgetattr(fd, &oldtio) == -1) 
         { 
-                perror("tcgetattr");
+                fprintf(stderr, "error: tcgetattr() code: %d\n", errno);
                 exit(-1);
         }
 
@@ -52,15 +59,15 @@ int main(int argc, char **argv)
         newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
 
         /* VTIME e VMIN devem ser alterados de forma a proteger com um 
-           temporizador a leitura do(s) próximo(s) caracter(es) */
+           temporizador a leitura do(s) prï¿½ximo(s) caracter(es) */
         tcflush(fd, TCIOFLUSH);
         if (tcsetattr(fd, TCSANOW, &newtio) == -1)
         {
-                perror("tcsetattr");
+                fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
                 exit(-1);
         }
 
-        printf("new termios structure set\n");
+        fprintf(stdout, "info: new termios structure set\n");
         
         fgets(buf, MAXLEN, stdin);
         const char *nl = strchr(buf, '\n');
@@ -69,7 +76,7 @@ int main(int argc, char **argv)
     
         int res;
         res = write(fd, buf, strlen(buf) + 1);   
-        printf("%d bytes written\n", res);
+        fprintf(stdout, "info: %d bytes written\n", res);
         
         c = 0;
         memset(buf, '\0', MAXLEN);
@@ -80,14 +87,14 @@ int main(int argc, char **argv)
                 c++;
         }
 
-        printf("%s", buf);
-        printf("%d bytes read\n", c);
+        fprintf(stdout, "%s", buf);
+        fprintf(stdout, "info: %d bytes read\n", c);
     
         /* revert to the old port settings */
         sleep(2);
         if (tcsetattr(fd, TCSANOW, &oldtio) == -1) 
         {
-                perror("tcsetattr");
+                fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
                 exit(-1);
         }
 

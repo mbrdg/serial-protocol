@@ -1,9 +1,15 @@
-/*Non-Canonical Input Processing*/
+/*
+ * receiver.c
+ * Non-Canonical Input Processing
+ * RC @ L.EIC 2122
+ * Author: Miguel Rodrigues
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
 
@@ -16,7 +22,7 @@ int main(int argc, char **argv)
 {
         if (argc < 2)
         {
-                fprintf(stderr, "usage: %s <serial-port>\n", argv[0]);
+                fprintf(stderr, "usage: %s <serialport>\n", argv[0]);
                 exit(1);
         }
 
@@ -29,14 +35,14 @@ int main(int argc, char **argv)
         fd = open(argv[1], O_RDWR | O_NOCTTY);
         if (fd < 0) 
         {
-                perror(argv[1]);
+                fprintf(stderr, "error: open() code: %d\n", errno);
                 exit(-1);
         }
 
         /* save current port settings */
         if (tcgetattr(fd, &oldtio) == -1) 
-        { 
-                perror("tcgetattr");
+        {
+                fprintf(stderr, "error: tcgetattr() code: %d\n", errno);
                 exit(-1);
         }
 
@@ -51,18 +57,16 @@ int main(int argc, char **argv)
         newtio.c_cc[VTIME] = 0;  /* inter-character timer unused */
         newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
 
-    /* 
-        VTIME e VMIN devem ser alterados de forma a proteger com
-        um temporizador a leitura do(s) próximo(s) caracter(es)
-    */
+        /*  VTIME e VMIN devem ser alterados de forma a proteger com
+            um temporizador a leitura do(s) proximo(s) caracter(es) */
         tcflush(fd, TCIOFLUSH);
         if (tcsetattr(fd,TCSANOW,&newtio) == -1) 
         {
-                perror("tcsetattr");
+                fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
                 exit(-1);
         }
 
-        printf("new termios structure set\n");
+        fprintf(stdout, "info: new termios structure set\n");
 
         int res, c = 0;
         while (!STOP)
@@ -73,13 +77,17 @@ int main(int argc, char **argv)
         }
 
         printf("%s", buf);
-        printf("%d bytes read\n", c);
+        fprintf(stdout, "info: %d bytes read\n", c);
 
         res = write(fd, buf, c);
-        printf("%d bytes written\n", res);
+        fprintf(stdout, "info: %d bytes written\n", res);
 
         sleep(2);
-        tcsetattr(fd, TCSANOW, &oldtio);
+        if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+        {
+                fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
+                exit(-1);
+        }
         
         close(fd);
         exit(0);
