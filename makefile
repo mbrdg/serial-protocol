@@ -1,11 +1,11 @@
 CC=gcc
 CFLAGS= -Wall -Werror -pedantic -g
 
-all: writer reader
+all: broadcaster receiver
 
-writer: writenoncanonical.c
+broadcaster: broadcaster.c
 	$(CC) $(CFLAGS) $< -o wserial
-reader: noncanonical.c
+receiver: receiver.c
 	$(CC) $(CFLAGS) $< -o rserial
 
 .PHONY: clean
