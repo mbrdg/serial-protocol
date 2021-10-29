@@ -20,15 +20,12 @@ int main(int argc, char **argv)
                 exit(1);
         }
 
-        int fd, c, res;
         struct termios oldtio, newtio;
         char buf[MAXLEN];
 
-    /*
-        Open serial port device for reading and writing and not as controlling tty
-        because we don't want to get killed if linenoise sends CTRL-C.
-    */  
-    
+        /*  Open serial port device for reading and writing and not as controlling
+            tty because we don't want to get killed if linenoise sends CTRL-C. */
+        int fd;
         fd = open(argv[1], O_RDWR | O_NOCTTY);
         if (fd < 0) 
         {
@@ -37,7 +34,7 @@ int main(int argc, char **argv)
         }
 
         /* save current port settings */
-        if (tcgetattr(fd,&oldtio) == -1) 
+        if (tcgetattr(fd, &oldtio) == -1) 
         { 
                 perror("tcgetattr");
                 exit(-1);
@@ -67,16 +64,19 @@ int main(int argc, char **argv)
 
         printf("new termios structure set\n");
 
-        c = 0;
+        int res, c = 0;
         while (!STOP)
         {       
                 res = read(fd, buf + c, sizeof(char));
-                STOP = (buf[c] == '\0' || res == 0 || c == (MAXLEN - 1));
+                STOP = (buf[c] == '\0' || !res || c == (MAXLEN - 1));
                 c++;
         }
 
         printf("%s", buf);
         printf("%d bytes read\n", c);
+
+        res = write(fd, buf, c);
+        printf("%d bytes written\n", res);
 
         sleep(2);
         tcsetattr(fd, TCSANOW, &oldtio);
@@ -84,3 +84,4 @@ int main(int argc, char **argv)
         close(fd);
         exit(0);
 }
+
