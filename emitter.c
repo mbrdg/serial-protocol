@@ -1,6 +1,6 @@
 /*
- * receiver.c
- * Non-Canonical Input Processing
+ * emitter.c
+ * Non-Canonical Input Processing 
  * RC @ L.EIC 2122
  * Author: Miguel Rodrigues
  */
@@ -18,7 +18,8 @@
 
 volatile int STOP = 0;
 
-int main(int argc, char **argv)
+int
+main (int argc, char **argv)
 {
         if (argc < 2)
         {
@@ -36,12 +37,12 @@ int main(int argc, char **argv)
         if (fd < 0) 
         {
                 fprintf(stderr, "error: open() code: %d\n", errno);
-                exit(-1);
+                exit(-1); 
         }
 
         /* save current port settings */
         if (tcgetattr(fd, &oldtio) == -1) 
-        {
+        { 
                 fprintf(stderr, "error: tcgetattr() code: %d\n", errno);
                 exit(-1);
         }
@@ -57,38 +58,46 @@ int main(int argc, char **argv)
         newtio.c_cc[VTIME] = 0;  /* inter-character timer unused */
         newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
 
-        /*  VTIME e VMIN devem ser alterados de forma a proteger com
-            um temporizador a leitura do(s) proximo(s) caracter(es) */
+        /* VTIME e VMIN devem ser alterados de forma a proteger com um 
+           temporizador a leitura do(s) proximo(s) caracter(es) */
         tcflush(fd, TCIOFLUSH);
-        if (tcsetattr(fd,TCSANOW,&newtio) == -1) 
+        if (tcsetattr(fd, TCSANOW, &newtio) == -1)
         {
                 fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
                 exit(-1);
         }
 
         fprintf(stdout, "info: new termios structure set\n");
-
-        int res, c = 0;
+        
+        fgets(buf, MAXLEN, stdin);
+        const char *nl = strchr(buf, '\n');
+        int c = nl ? nl - buf : MAXLEN - 2;
+        buf[c+1] = '\0';
+    
+        int res;
+        res = write(fd, buf, strlen(buf) + 1);
+        fprintf(stdout, "info: %d bytes written\n", res);
+        
+        c = 0;
+        memset(buf, '\0', MAXLEN);
         while (!STOP)
-        {       
+        {
                 res = read(fd, buf + c, sizeof(char));
                 STOP = (buf[c] == '\0' || !res || c == (MAXLEN - 1));
                 c++;
         }
 
-        printf("%s", buf);
+        fprintf(stdout, "%s", buf);
         fprintf(stdout, "info: %d bytes read\n", c);
-
-        res = write(fd, buf, c);
-        fprintf(stdout, "info: %d bytes written\n", res);
-
+    
+        /* revert to the old port settings */
         sleep(2);
-        if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+        if (tcsetattr(fd, TCSANOW, &oldtio) == -1) 
         {
                 fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
                 exit(-1);
         }
-        
+
         close(fd);
         exit(0);
 }
