@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         if (argc < 2)
         {
                 fprintf(stderr, "usage: %s <serialport>\n", argv[0]);
-                exit(1);
+                return 1;
         }
 
         struct termios oldtio, newtio;
@@ -36,14 +36,14 @@ int main(int argc, char **argv)
         if (fd < 0) 
         {
                 fprintf(stderr, "error: open() code: %d\n", errno);
-                exit(-1);
+                return -1;
         }
 
         /* save current port settings */
         if (tcgetattr(fd, &oldtio) == -1) 
         {
                 fprintf(stderr, "error: tcgetattr() code: %d\n", errno);
-                exit(-1);
+                return -1;
         }
 
         memset(&newtio, '\0', sizeof(newtio));
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
         if (tcsetattr(fd,TCSANOW,&newtio) == -1) 
         {
                 fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
-                exit(-1);
+                return -1;
         }
 
         fprintf(stdout, "info: new termios structure set\n");
@@ -86,10 +86,10 @@ int main(int argc, char **argv)
         if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
         {
                 fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
-                exit(-1);
+                return -1;
         }
         
         close(fd);
-        exit(0);
+        return 0;
 }
 
