@@ -1,9 +1,9 @@
 CC=gcc
 CFLAGS= -Wall -Werror -pedantic -g
 
-all: emitter receiver
+all: sender receiver
 
-emitter: emitter.c
+sender: sender.c
 	$(CC) $(CFLAGS) $< -o wserial
 receiver: receiver.c
 	$(CC) $(CFLAGS) $< -o rserial
