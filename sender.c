@@ -17,14 +17,16 @@
 #define BAUDRATE B38400
 
 const unsigned char FLAG = 0x7E;
+int fd, retries = 0, connection = 0;
 
 int 
-send_set_msg(int tty_fd)
+send_set_msg(void)
 {
         const unsigned char CMD_SNT = 0x03;
-        const unsigned char SET_CMD = 0x03;      
+        const unsigned char SET_CMD = 0x03;
 
-        /* build the set_msg */
+        fprintf(stdout, "info: [SET] building - current try: %d\n", ++retries);
+
         unsigned char set[5];
         set[0] = FLAG;
         set[1] = CMD_SNT;
@@ -34,7 +36,7 @@ send_set_msg(int tty_fd)
 
         /* sending the msg to the other end */
         int wb;
-        wb = write(tty_fd, set, sizeof(set));
+        wb = write(fd, set, sizeof(set));
 
         if (wb == -1)
         {
@@ -46,14 +48,16 @@ send_set_msg(int tty_fd)
         return 0;
 }
 
+void sig_alrm_handler(int signum) { send_set_msg(); }
+
 int 
-read_ua_msg(int tty_fd)
+read_ua_msg(void)
 {
         const char ERROR[] = "error: [UA]";
 
         unsigned char ua[5];
         int rb;
-        rb = read(tty_fd, ua, sizeof(ua));
+        rb = read(fd, ua, sizeof(ua));
 
         if (rb == -1)
         {
@@ -72,6 +76,7 @@ read_ua_msg(int tty_fd)
                 goto error_handler;
         }
 
+        connection = 1;
         fprintf(stdout, "info: connection established\n");
         return 0;
 
@@ -90,7 +95,6 @@ main (int argc, char **argv)
         return 1;
         }
 
-        int fd;
         struct termios oldtio, newtio;
 
         /*  Open serial port device for reading and writing and not as controlling
@@ -130,12 +134,21 @@ main (int argc, char **argv)
         }
 
         fprintf(stdout, "info: new termios structure set\n");
-        
-        send_set_msg(fd);
-        read_ua_msg(fd);
-            
-        /* revert to the old port settings */
+
+        signal(SIGALRM, sig_alrm_handler);
+        send_set_msg();
+        while (retries < 3 && !connection)
+        {
+                alarm(3);
+                read_ua_msg();
+        }
+
+        alarm(0);
+        if (!connection)
+                fprintf(stderr, "error: connection timeout\n");
         sleep(2);
+
+        /* revert to the old port settings */
         if (tcsetattr(fd, TCSANOW, &oldtio) == -1) 
         {
                 fprintf(stderr, "error: tcsetattr() code: %d\n", errno);
