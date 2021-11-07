@@ -14,9 +14,68 @@
 #include <termios.h>
 
 #define BAUDRATE B38400
-#define MAXLEN 255
 
-volatile int STOP = 0;
+const unsigned char FLAG = 0x7E;
+
+int
+read_set_msg(int tty_fd)
+{
+        const char ERROR[] = "error: [SET]";
+
+        unsigned char set[5];
+        int rb;
+        rb = read(tty_fd, set, sizeof(set));
+
+        if (rb == -1) 
+        {
+                fprintf(stderr, "%s read() code: %d\n", ERROR, errno);
+                goto error_handler;
+        }
+        
+        if (set[0] != set[4] || set[0] != FLAG)
+        {
+                fprintf(stderr, "%s flags not found\n", ERROR);
+                goto error_handler;
+        }
+        if (set[3] != (set[1] ^ set[2]))
+        {
+                fprintf(stderr, "%s parity can't be checked\n", ERROR);
+                goto error_handler;
+        }
+
+        return 0;
+
+error_handler:
+        fprintf(stderr, "%s can't establish a connection\n", ERROR);
+        return -1;
+}
+
+int 
+send_ua_msg(int tty_fd) 
+{
+        const unsigned char CMD_SNT = 0x01;
+        const unsigned char UA_CMD = 0x07;
+
+        unsigned char ua[5];
+        ua[0] = FLAG;
+        ua[1] = CMD_SNT;
+        ua[2] = UA_CMD;
+        ua[3] = ua[1] ^ ua[2];
+        ua[4] = FLAG;
+
+        int wb;
+        wb = write(tty_fd, ua, sizeof(ua));
+
+        if (wb == -1) 
+        {
+                fprintf(stderr, "error: [UA] write() code: %d\n", errno);
+                return -1;
+        }
+        
+        fprintf(stdout, "info: [UA] sent to the sender\n");
+        return 0;
+}
+
 
 int main(int argc, char **argv)
 {
@@ -27,7 +86,6 @@ int main(int argc, char **argv)
         }
 
         struct termios oldtio, newtio;
-        char buf[MAXLEN];
 
         /*  Open serial port device for reading and writing and not as controlling
             tty because we don't want to get killed if linenoise sends CTRL-C. */
@@ -68,19 +126,8 @@ int main(int argc, char **argv)
 
         fprintf(stdout, "info: new termios structure set\n");
 
-        int res, c = 0;
-        while (!STOP)
-        {       
-                res = read(fd, buf + c, sizeof(char));
-                STOP = (buf[c] == '\0' || !res || c == (MAXLEN - 1));
-                c++;
-        }
-
-        printf("%s", buf);
-        fprintf(stdout, "info: %d bytes read\n", c);
-
-        res = write(fd, buf, c);
-        fprintf(stdout, "info: %d bytes written\n", res);
+        read_set_msg(fd);
+        send_ua_msg(fd);
 
         sleep(2);
         if (tcsetattr(fd, TCSANOW, &oldtio) == -1)

@@ -12,11 +12,74 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
-#define MAXLEN 255
 
-volatile int STOP = 0;
+const unsigned char FLAG = 0x7E;
+
+int 
+send_set_msg(int tty_fd)
+{
+        const unsigned char CMD_SNT = 0x03;
+        const unsigned char SET_CMD = 0x03;      
+
+        /* build the set_msg */
+        unsigned char set[5];
+        set[0] = FLAG;
+        set[1] = CMD_SNT;
+        set[2] = SET_CMD;
+        set[3] = set[1] ^ set[2];
+        set[4] = FLAG;
+
+        /* sending the msg to the other end */
+        int wb;
+        wb = write(tty_fd, set, sizeof(set));
+
+        if (wb == -1)
+        {
+                fprintf(stderr, "error: [SET] write() code: %d\n", errno);
+                return -1;
+        }
+
+        fprintf(stdout, "info: [SET] sent to the receiver\n");
+        return 0;
+}
+
+int 
+read_ua_msg(int tty_fd)
+{
+        const char ERROR[] = "error: [UA]";
+
+        unsigned char ua[5];
+        int rb;
+        rb = read(tty_fd, ua, sizeof(ua));
+
+        if (rb == -1)
+        {
+                fprintf(stderr, "%s read() code: %d\n", ERROR, errno);
+                goto error_handler;
+        }
+
+        if (ua[0] != ua[4] || ua[0] != FLAG)
+        {
+                fprintf(stderr, "%s flags not found\n", ERROR);
+                goto error_handler;
+        }
+        if (ua[3] != (ua[1] ^ ua[2]))
+        {    
+                fprintf(stderr, "%s parity can't be checked\n", ERROR);
+                goto error_handler;
+        }
+
+        fprintf(stdout, "info: connection established\n");
+        return 0;
+
+error_handler:
+        fprintf(stderr, "%s can't establish a connection\n", ERROR);
+        return -1;
+}
+
 
 int
 main (int argc, char **argv)
@@ -24,15 +87,14 @@ main (int argc, char **argv)
         if (argc < 2)
         {
                 fprintf(stderr, "usage: %s <serialport>\n", argv[0]);
-                return 1;
+        return 1;
         }
 
+        int fd;
         struct termios oldtio, newtio;
-        char buf[MAXLEN];
 
         /*  Open serial port device for reading and writing and not as controlling
             tty because we don't want to get killed if linenoise sends CTRL-C. */
-        int fd;
         fd = open(argv[1], O_RDWR | O_NOCTTY);
         if (fd < 0) 
         {
@@ -69,27 +131,9 @@ main (int argc, char **argv)
 
         fprintf(stdout, "info: new termios structure set\n");
         
-        fgets(buf, MAXLEN, stdin);
-        const char *nl = strchr(buf, '\n');
-        int c = nl ? nl - buf : MAXLEN - 2;
-        buf[c+1] = '\0';
-    
-        int res;
-        res = write(fd, buf, strlen(buf) + 1);
-        fprintf(stdout, "info: %d bytes written\n", res);
-        
-        c = 0;
-        memset(buf, '\0', MAXLEN);
-        while (!STOP)
-        {
-                res = read(fd, buf + c, sizeof(char));
-                STOP = (buf[c] == '\0' || !res || c == (MAXLEN - 1));
-                c++;
-        }
-
-        fprintf(stdout, "%s", buf);
-        fprintf(stdout, "info: %d bytes read\n", c);
-    
+        send_set_msg(fd);
+        read_ua_msg(fd);
+            
         /* revert to the old port settings */
         sleep(2);
         if (tcsetattr(fd, TCSANOW, &oldtio) == -1) 
