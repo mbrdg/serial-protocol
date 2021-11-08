@@ -4,10 +4,10 @@ CFLAGS= -Wall -Werror -pedantic -g
 all: sender receiver
 
 sender: sender.c
-	$(CC) $(CFLAGS) $< -o wserial
+	$(CC) $(CFLAGS) $< -o sndr
 receiver: receiver.c
-	$(CC) $(CFLAGS) $< -o rserial
+	$(CC) $(CFLAGS) $< -o recv
 
 .PHONY: clean
 clean:
-	rm -f wserial rserial
+	rm -f sndr recv
