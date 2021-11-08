@@ -19,6 +19,11 @@
 const unsigned char FLAG = 0x7E;
 int fd, retries = 0, connection = 0;
 
+/* forward declarations */
+int send_set_msg(void);
+void sig_alrm_handler(int signum) { send_set_msg(); }
+
+
 int 
 send_set_msg(void)
 {
@@ -47,8 +52,6 @@ send_set_msg(void)
         fprintf(stdout, "info: [SET] sent to the receiver\n");
         return 0;
 }
-
-void sig_alrm_handler(int signum) { send_set_msg(); }
 
 int 
 read_ua_msg(void)
