@@ -14,8 +14,7 @@
 #include <termios.h>
 
 #define BAUDRATE B38400
-
-const unsigned char FLAG = 0x7E;
+#define FLAG 0x7E
 
 int
 read_set_msg(int tty_fd)

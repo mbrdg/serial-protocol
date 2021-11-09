@@ -15,8 +15,8 @@
 #include <signal.h>
 
 #define BAUDRATE B38400
+#define FLAG 0x7E
 
-const unsigned char FLAG = 0x7E;
 int fd, retries = 0, connection = 0;
 
 /* forward declarations */
