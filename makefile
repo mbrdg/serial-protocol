@@ -8,9 +8,8 @@ sender: sender.c
 receiver: receiver.c
 	$(CC) $(CFLAGS) $< -o recv
 
+.PHONY: clean setup
 setup:
 	sudo socat -d -d PTY,link=/dev/ttyS10,mode=777 PTY,link=/dev/ttyS11,mode=777
-
-.PHONY: clean
 clean:
 	rm -f sndr recv
