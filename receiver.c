@@ -19,34 +19,63 @@
 int
 read_set_msg(int tty_fd)
 {
-        const char ERROR[] = "error: [SET]";
+        const unsigned char ADDR = 0x03;
+        const unsigned char CMD_SET = 0x03;
 
         unsigned char set[5];
-        int rb;
-        rb = read(tty_fd, set, sizeof(set));
+        enum State { start, flag_rcv, a_rcv, c_rcv, bcc_ok, stop };
+        enum State st = start;
 
-        if (rb == -1) 
+        while (st != stop)
         {
-                fprintf(stderr, "%s read() code: %d\n", ERROR, errno);
-                goto error_handler;
-        }
-        
-        if (set[0] != set[4] || set[0] != FLAG)
-        {
-                fprintf(stderr, "%s flags not found\n", ERROR);
-                goto error_handler;
-        }
-        if (set[3] != (set[1] ^ set[2]))
-        {
-                fprintf(stderr, "%s parity can't be checked\n", ERROR);
-                goto error_handler;
+                if (read(tty_fd, set + st, 1) == -1)
+                {
+                        fprintf(stderr, "error: [SET] read() code: %d\n", errno);
+                        return -1;
+                }
+
+                switch (st) {
+                case start:
+                        st = (set[st] == FLAG) ? flag_rcv : start;
+                        break;
+                case flag_rcv:
+                        if (set[st] == ADDR)
+                                st = a_rcv;
+                        else if (set[st] != FLAG)
+                                st = start;
+                        break;
+                case a_rcv:
+                        if (set[st] == CMD_SET)
+                                st = c_rcv;
+                        else if (set[st] == FLAG)
+                        {
+                                st = flag_rcv;
+                                set[0] = FLAG;
+                        }
+                        else 
+                                st = start;
+                        break;
+                case c_rcv:
+                        if (set[st] == (set[a_rcv] ^ set[c_rcv]))
+                                st = bcc_ok;
+                        else if (set[st] == FLAG)
+                        {
+                                st = flag_rcv;
+                                set[0] = FLAG;
+                        }
+                        else 
+                                st = start;
+                        break;
+                case bcc_ok:
+                        st = (set[st] == FLAG) ? stop : start;
+                        break;
+                case stop:
+                        break;
+                }
         }
 
+        fprintf(stdout, "info: [SET] read successfully\n");
         return 0;
-
-error_handler:
-        fprintf(stderr, "%s can't establish a connection\n", ERROR);
-        return -1;
 }
 
 int 
@@ -113,7 +142,7 @@ main(int argc, char **argv)
         newtio.c_lflag = 0;
 
         newtio.c_cc[VTIME] = 0;  /* inter-character timer unused */
-        newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
+        newtio.c_cc[VMIN] = 1;   /* blocking read until 1 char received */
 
         /*  VTIME e VMIN devem ser alterados de forma a proteger com
             um temporizador a leitura do(s) proximo(s) caracter(es) */

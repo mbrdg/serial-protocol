@@ -56,36 +56,64 @@ send_set_msg(void)
 int 
 read_ua_msg(void)
 {
-        const char ERROR[] = "error: [UA]";
+        const unsigned char ADDR = 0x01;
+        const unsigned char CMD_UA = 0x07;
 
         unsigned char ua[5];
-        int rb;
-        rb = read(fd, ua, sizeof(ua));
+        enum State { start, flag_rcv, a_rcv, c_rcv, bcc_ok, stop };
+        enum State st = start;
 
-        if (rb == -1)
+        while (st != stop)
         {
-                fprintf(stderr, "%s read() code: %d\n", ERROR, errno);
-                goto error_handler;
-        }
+                if (read(fd, ua + st, 1) == -1) 
+                {
+                        fprintf(stderr, "error: [UA] read() code %d\n", errno);
+                        return -1;
+                }
 
-        if (ua[0] != ua[4] || ua[0] != FLAG)
-        {
-                fprintf(stderr, "%s flags not found\n", ERROR);
-                goto error_handler;
+                switch (st) {
+                case start:
+                        st = (ua[st] == FLAG) ? flag_rcv : start;
+                        break;
+                case flag_rcv:
+                        if (ua[st] == ADDR)
+                                st = a_rcv;
+                        else if (ua[st] != FLAG)
+                                st = start;
+                        break;
+                case a_rcv:
+                        if (ua[st] == CMD_UA)
+                                st = c_rcv;
+                        else if (ua[st] == FLAG)
+                        {
+                                st = flag_rcv;
+                                ua[0] = FLAG;
+                        }
+                        else 
+                                st = start;
+                        break;
+                case c_rcv:
+                        if (ua[st] == (ua[a_rcv] ^ ua[c_rcv]))
+                                st = bcc_ok;
+                        else if (ua[st] == FLAG)
+                        {
+                                st = flag_rcv;
+                                ua[0] = FLAG;
+                        }
+                        else
+                                st = start;
+                        break;
+                case bcc_ok:
+                        st = (ua[st] == FLAG) ? stop : start;
+                        break;
+                case stop:
+                        break;
+                }
         }
-        if (ua[3] != (ua[1] ^ ua[2]))
-        {    
-                fprintf(stderr, "%s parity can't be checked\n", ERROR);
-                goto error_handler;
-        }
-
+        
         connection = 1;
-        fprintf(stdout, "info: connection established\n");
+        fprintf(stdout, "info: [UA] read successfully\n");
         return 0;
-
-error_handler:
-        fprintf(stderr, "%s can't establish a connection\n", ERROR);
-        return -1;
 }
 
 
@@ -95,7 +123,7 @@ main (int argc, char **argv)
         if (argc < 2)
         {
                 fprintf(stderr, "usage: %s <serialport>\n", argv[0]);
-        return 1;
+                return 1;
         }
 
         struct termios oldtio, newtio;
@@ -125,7 +153,7 @@ main (int argc, char **argv)
         newtio.c_lflag = 0;
 
         newtio.c_cc[VTIME] = 0;  /* inter-character timer unused */
-        newtio.c_cc[VMIN] = 5;   /* blocking read until 5 chars received */
+        newtio.c_cc[VMIN] = 1;   /* blocking read until 1 char received */
 
         /* VTIME e VMIN devem ser alterados de forma a proteger com um 
            temporizador a leitura do(s) proximo(s) caracter(es) */
