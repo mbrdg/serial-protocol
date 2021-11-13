@@ -56,7 +56,7 @@ read_set_msg(int tty_fd)
                                 st = start;
                         break;
                 case c_rcv:
-                        if (set[st] == (set[a_rcv] ^ set[c_rcv]))
+                        if (set[st] == (set[st-2] ^ set[st-1]))
                                 st = bcc_ok;
                         else if (set[st] == FLAG)
                         {

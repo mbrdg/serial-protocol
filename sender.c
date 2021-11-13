@@ -93,7 +93,7 @@ read_ua_msg(void)
                                 st = start;
                         break;
                 case c_rcv:
-                        if (ua[st] == (ua[a_rcv] ^ ua[c_rcv]))
+                        if (ua[st] == (ua[st-2] ^ ua[st-1]))
                                 st = bcc_ok;
                         else if (ua[st] == FLAG)
                         {
@@ -166,15 +166,15 @@ main (int argc, char **argv)
 
         fprintf(stdout, "info: new termios structure set\n");
 
-        signal(SIGALRM, sig_alrm_handler);
+        // signal(SIGALRM, sig_alrm_handler);
         send_set_msg();
-        while (retries < 3 && !connection)
-        {
-                alarm(3);
+        //while (retries < 3 && !connection)
+        //{
+        //        alarm(3);
                 read_ua_msg();
-        }
+        //}
 
-        alarm(0);
+        //alarm(0);
         if (!connection)
                 fprintf(stderr, "error: connection timeout\n");
         sleep(2);
