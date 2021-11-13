@@ -2,7 +2,7 @@
  * receiver.c
  * Non-Canonical Input Processing
  * RC @ L.EIC 2122
- * Author: Miguel Rodrigues
+ * Author: Miguel Rodrigues & Nuno Castro
  */
 
 #include <stdlib.h>
