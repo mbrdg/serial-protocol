@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <signal.h>
+#include <poll.h>
 
 #define BAUDRATE B38400
 #define FLAG 0x7E
@@ -49,7 +50,9 @@ send_set_msg(void)
                 return -1;
         }
 
+        alarm(3);
         fprintf(stdout, "info: [SET] sent to the receiver\n");
+
         return 0;
 }
 
@@ -59,16 +62,22 @@ read_ua_msg(void)
         const unsigned char ADDR = 0x01;
         const unsigned char CMD_UA = 0x07;
 
+        struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
+
         unsigned char ua[5];
         enum State { start, flag_rcv, a_rcv, c_rcv, bcc_ok, stop };
         enum State st = start;
 
-        while (st != stop)
+        while (st != stop && retries < 3)
         {
-                if (read(fd, ua + st, 1) == -1) 
+                poll(&pfd, 1, 0);
+                if (pfd.revents & POLLIN)
                 {
-                        fprintf(stderr, "error: [UA] read() code %d\n", errno);
-                        return -1;
+                        if (read(fd, ua + st, 1) == -1) 
+                        {
+                                fprintf(stderr, "error: [UA] read() code %d\n", errno);
+                                return -1;
+                        }
                 }
 
                 switch (st) {
@@ -105,15 +114,18 @@ read_ua_msg(void)
                         break;
                 case bcc_ok:
                         st = (ua[st] == FLAG) ? stop : start;
+                        connection = (st == stop);
                         break;
                 case stop:
                         break;
                 }
         }
         
-        connection = 1;
-        fprintf(stdout, "info: [UA] read successfully\n");
-        return 0;
+        alarm(0);
+
+        connection ? fprintf(stdout, "info: [UA] read succesfully\n") : 
+                     fprintf(stderr, "error: connection timeout\n");
+        return -connection;
 }
 
 
@@ -166,17 +178,11 @@ main (int argc, char **argv)
 
         fprintf(stdout, "info: new termios structure set\n");
 
-        // signal(SIGALRM, sig_alrm_handler);
-        send_set_msg();
-        //while (retries < 3 && !connection)
-        //{
-        //        alarm(3);
-                read_ua_msg();
-        //}
+        signal(SIGALRM, sig_alrm_handler);
 
-        //alarm(0);
-        if (!connection)
-                fprintf(stderr, "error: connection timeout\n");
+        send_set_msg();
+        read_ua_msg();
+
         sleep(2);
 
         /* revert to the old port settings */

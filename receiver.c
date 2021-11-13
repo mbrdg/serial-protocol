@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <termios.h>
+#include <poll.h>
 
 #define BAUDRATE B38400
 #define FLAG 0x7E
@@ -22,16 +23,22 @@ read_set_msg(int tty_fd)
         const unsigned char ADDR = 0x03;
         const unsigned char CMD_SET = 0x03;
 
+        struct pollfd pfd = { .fd = tty_fd, .events = POLLIN, .revents = 0 };
+
         unsigned char set[5];
         enum State { start, flag_rcv, a_rcv, c_rcv, bcc_ok, stop };
         enum State st = start;
 
         while (st != stop)
         {
-                if (read(tty_fd, set + st, 1) == -1)
+                poll(&pfd, 1, 0);    
+                if (pfd.revents & POLLIN)
                 {
-                        fprintf(stderr, "error: [SET] read() code: %d\n", errno);
-                        return -1;
+                        if (read(tty_fd, set + st, 1) == -1)
+                        {
+                                fprintf(stderr, "error: [SET] read() code: %d\n", errno);
+                                return -1;
+                        }
                 }
 
                 switch (st) {
