@@ -1,3 +1,10 @@
+/*
+ * protocol.c
+ * Serial port protocol
+ * RC @ L.EIC 2122
+ * Authors: Miguel Rodrigues & Nuno Castro
+ */
+
 #include "protocol.h"
 
 /* macros */
@@ -8,32 +15,25 @@
 #define FLAG 0x7E
 
 /* enums */ 
-enum {
-        SET = 0x03,
-        DISC = 0x0B,
-        UA = 0x07,
-        RR = 0x03,
-        REJ = 0x01
-} cmdFrameUS;
+typedef enum { SET = 0x03, DISC = 0x0B, UA = 0x07, RR = 0x03, REJ = 0x01 } frameCmd;
 
 /* global variables */
 static struct termios oldtio, newtio;
-static int file_descriptor, retries = 0;
+static int filedscptr, retries = 0;
 
 static int 
-term_conf_init(int porta)
+term_conf_init(int port)
 {
         char filename[12];
-        snprintf(filename, 12, "/dev/ttyS%d", porta);
+        snprintf(filename, 12, "/dev/ttyS%d", port);
 
-        int file_descriptor;
-        file_descriptor = open(filename, O_RWDR | O_NOCTTY);
-        if (fd < 0) {
+        filedscptr = open(filename, O_RDWR | O_NOCTTY);
+        if (filedscptr< 0) {
                 fprintf(stderr, "err: open() -> code: %d\n", errno);
                 return -1;
         }
 
-        if (tcgetattr(fd, &oldtio) == -1) {
+        if (tcgetattr(filedscptr, &oldtio) == -1) {
                 fprintf(stderr, "err: tcgetattr() -> code: %d\n", errno);
                 return -1;
         }
@@ -48,14 +48,14 @@ term_conf_init(int porta)
         newtio.c_cc[VTIME] = 0;
         newtio.c_cc[VMIN] = 1;
 
-        tcflush(fd, TCIOFLUSH);
-        if (tcsetattr(fd, TCSANOW, &newtio) == -1) {
+        tcflush(filedscptr, TCIOFLUSH);
+        if (tcsetattr(filedscptr, TCSANOW, &newtio) == -1) {
                 fprintf(stderr, "err: tcsetattr() -> code: %d\n", errno);
                 return -1;
         }
 
         fprintf(stdout, "log: new term attributes set\n");
-        return file_descriptor;
+        return filedscptr;
 }
 
 static int
@@ -72,11 +72,11 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_US(int fd, cmdFrameUS cmd, comStatus status) 
+send_frame_US(int fd, frameCmd cmd, char endpt) 
 {
         char frame[5];
         frame[0] = FLAG;
-        frame[1] = status;
+        frame[1] = endpt;
         frame[2] = cmd;
         frame[3] = frame[1] ^ frame[2];
         frame[4] = FLAG;
@@ -93,10 +93,10 @@ send_frame_US(int fd, cmdFrameUS cmd, comStatus status)
 }
 
 static int 
-read_frame_US(int fd, cmdFrameUS cmd, comStatus addr)
+read_frame_US(int fd, frameCmd cmd, char addr)
 {
-        enum { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP } state;
-        state st = START;
+        enum state { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP };
+        enum state st = START;
         struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
         char frame[5];
 
@@ -140,7 +140,7 @@ read_frame_US(int fd, cmdFrameUS cmd, comStatus addr)
                         }
                         break;
                 case BCC_OK:
-                        st = (frame[st] == FLAG) ? stop : start;
+                        st = (frame[st] == FLAG) ? STOP : START;
                         break;
                 default:
                         break;
@@ -151,10 +151,10 @@ read_frame_US(int fd, cmdFrameUS cmd, comStatus addr)
 }
 
 void 
-transmitter_alrm_handler(int unusded) 
+transmitter_alrm_handler(int unused) 
 {
         alarm(TIMEOUT);
-        send_frame_US(file_descriptor, SET, TRANSMITTER);
+        send_frame_US(filedscptr, SET, TRANSMITTER);
 }
 
 
@@ -170,7 +170,7 @@ llopen_receiver(int fd)
 static int 
 llopen_transmitter(int fd)
 {
-        signal(SIGALARM, transmitter_alrm_handler);
+        signal(SIGALRM, transmitter_alrm_handler);
 
         alarm(TIMEOUT);
         send_frame_US(fd, SET, TRANSMITTER);
@@ -182,31 +182,30 @@ llopen_transmitter(int fd)
 
 
 int 
-llopen(int porta, comStatus status)
+llopen(int porta, char endpt)
 {
         int fd;
         fd = term_conf_init(porta);
         if (fd < 0)
                 return -1;
 
-        if (comStatus == RECEIVER)
-                llopen_receiver(fd);
-        else
-                llopen_transmitter(fd);
+        endpt == RECEIVER ? llopen_receiver(fd) :
+                             llopen_transmitter(fd);
+        return 0;
 }
 
 
 int
 llwrite(int fd, char *buffer, int len)
 {
-    return 0;
+        return 0;
 }
 
 
 int 
 llread(int fd, char *buffer)
 {
-    return 0;
+        return 0;
 }
 
 

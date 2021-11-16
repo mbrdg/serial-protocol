@@ -1,12 +1,14 @@
 CC=gcc
 CFLAGS= -Wall -Werror -pedantic -g
 
+OBJ=protocol.c
+
 all: sender receiver
 
-sender: sender.c
-	$(CC) $(CFLAGS) $< -o sndr
-receiver: receiver.c
-	$(CC) $(CFLAGS) $< -o recv
+sender: $(OBJ) sender.c
+	$(CC) $(CFLAGS) $^ -o sndr
+receiver: $(OBJ) receiver.c
+	$(CC) $(CFLAGS) $^ -o recv
 
 .PHONY: clean setup
 setup:
