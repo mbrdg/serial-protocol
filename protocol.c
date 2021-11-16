@@ -331,7 +331,7 @@ llread(int fd, char *buffer)
                         frame_header[st] = c_read;
                         if (frame_header[st] == 0x00 || frame_header[st] == 0x70) {
                                 st = C_RCV;
-                                seqnum = (frame[c] >> 7) & 0x01;
+                                seqnum = (frame_header[st] >> 7) & 0x01;
                         } else if (frame_header[st] == FLAG) {
                                 st = FLAG_RCV;
                                 frame_header[0] = FLAG;
