@@ -28,7 +28,7 @@ term_conf_init(int port)
         snprintf(filename, 12, "/dev/ttyS%d", port);
 
         filedscptr = open(filename, O_RDWR | O_NOCTTY);
-        if (filedscptr< 0) {
+        if (filedscptr < 0) {
                 fprintf(stderr, "err: open() -> code: %d\n", errno);
                 return -1;
         }
@@ -72,11 +72,11 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_US(int fd, frameCmd cmd, char endpt) 
+send_frame_US(int fd, frameCmd cmd, char addr) 
 {
         char frame[5];
         frame[0] = FLAG;
-        frame[1] = endpt;
+        frame[1] = addr;
         frame[2] = cmd;
         frame[3] = frame[1] ^ frame[2];
         frame[4] = FLAG;
@@ -154,14 +154,14 @@ void
 transmitter_alrm_handler(int unused) 
 {
         alarm(TIMEOUT);
-        send_frame_US(filedscptr, SET, TRANSMITTER);
+        send_frame_US(filedscptr, SET, RECEIVER);
 }
 
 
 static int 
 llopen_receiver(int fd)
 {
-        read_frame_US(fd, SET, RECEIVER);
+        read_frame_US(fd, SET, TRANSMITTER);
         send_frame_US(fd, UA, RECEIVER);
         
         return 0;
@@ -174,7 +174,7 @@ llopen_transmitter(int fd)
 
         alarm(TIMEOUT);
         send_frame_US(fd, SET, TRANSMITTER);
-        read_frame_US(fd, UA, TRANSMITTER);
+        read_frame_US(fd, UA, RECEIVER);
         alarm(0);
 
         return 0;
