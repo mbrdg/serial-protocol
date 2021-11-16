@@ -20,6 +20,8 @@
 #define RECEIVER 0x01
 #define TRANSMITTER 0x03
 
+#define MAX_PACKET_SIZE 1024
+
 /***
  * Sets up the terminal, in order to send information packets
  * @param int[in] - port x corresponding to the file /dev/ttySx
