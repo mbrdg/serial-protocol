@@ -16,11 +16,14 @@
 #define ESCAPE 0x7D
 
 /* enums */ 
-typedef enum { SET = 0x03, DISC = 0x0B, UA = 0x07, RR = 0x03, REJ = 0x01 } frameCmd;
+typedef enum { SET, DISC, UA, RR_0 , REJ_0, RR_1, REJ_1 } frameCmd;
+static unsigned const char cmds[7] = { 0x03, 0x0B, 0x07, 0x03, 0x01, 0x83, 0x81 };
+typedef enum { DISCONNECT = -2, ERROR = -1, OK = 0 } errorRead;
 
 /* global variables */
 static struct termios oldtio, newtio;
 static int filedscptr, retries = 0, seqnum = 0;
+static char connector;
 
 static int 
 term_conf_init(int port)
@@ -73,12 +76,12 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_US(int fd, frameCmd cmd, char addr) 
+send_frame_US(int fd, int cmd, char addr) 
 {
-        char frame[5];
+        unsigned char frame[5];
         frame[0] = FLAG;
         frame[1] = addr;
-        frame[2] = cmd;
+        frame[2] = cmds[cmd];
         frame[3] = frame[1] ^ frame[2];
         frame[4] = FLAG;
 
@@ -92,12 +95,13 @@ send_frame_US(int fd, frameCmd cmd, char addr)
 }
 
 static int 
-read_frame_US(int fd, frameCmd cmd, char addr)
+read_frame_US(int fd, char cmd_mask, char addr)
 {
         enum state { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP };
         enum state st = START;
         struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
-        char frame[5];
+        unsigned char frame[5];
+        int i;
 
         while (st != STOP && retries < MAX_RETRIES) {
                 poll(&pfd, 1, 0);
@@ -119,14 +123,20 @@ read_frame_US(int fd, frameCmd cmd, char addr)
                                 st = START;
                         break;
                 case A_RCV:
-                        if (frame[st] == cmd) {
-                                st = C_RCV;
-                        } else if (frame[st] == FLAG) {
+                        for (i = 0; i < 7; i++) {
+                                if (((cmd_mask >> i) & 0x01) && frame[st] == cmds[i]) {
+                                        st = C_RCV;
+                                        goto exit_A_RCV;
+                                }
+                        }
+
+                        if (frame[st] == FLAG) {
                                 st = FLAG_RCV;
                                 frame[0] = FLAG;
                         } else {
                                 st = START;
                         }
+exit_A_RCV:
                         break;
                 case C_RCV:
                         if (frame[st] == (frame[st-1] ^ frame[st-2])) {
@@ -160,7 +170,7 @@ transmitter_alrm_handler(int unused)
 static int 
 llopen_receiver(int fd)
 {
-        read_frame_US(fd, SET, TRANSMITTER);
+        read_frame_US(fd, (1 << SET), TRANSMITTER);
         send_frame_US(fd, UA, RECEIVER);
         
         return 0;
@@ -173,12 +183,11 @@ llopen_transmitter(int fd)
 
         alarm(TIMEOUT);
         send_frame_US(fd, SET, TRANSMITTER);
-        read_frame_US(fd, UA, RECEIVER);
+        read_frame_US(fd, (1 << UA), RECEIVER);
         alarm(0);
 
         return 0;
 }
-
 
 int 
 llopen(int porta, char endpt)
@@ -187,9 +196,9 @@ llopen(int porta, char endpt)
         fd = term_conf_init(porta);
         if (fd < 0)
                 return -1;
-
-        endpt == RECEIVER ? llopen_receiver(fd) :
-                             llopen_transmitter(fd);
+        
+        connector = endpt;
+        connector == RECEIVER ? llopen_receiver(fd) : llopen_transmitter(fd);
         return 0;
 }
 
@@ -233,6 +242,13 @@ stuff_data(char *buffer, int *len)
         return data;
 }
 
+static int
+read_info_frame_response(int fd, char addr)
+{
+        char mask = 1 << RR_0 | 1 << RR_1 | 1 << REJ_0 | 1 << REJ_1;
+        return read_frame_US(fd, mask, addr);
+}
+
 int
 llwrite(int fd, char *buffer, int len)
 {
@@ -257,7 +273,7 @@ llwrite(int fd, char *buffer, int len)
                 return -1;
         }
 
-        // still missing the resposnse
+        read_info_frame_response(fd, RECEIVER);
 
         return wb;
 }
@@ -297,6 +313,19 @@ destuff_data(char *buffer, int *len)
         return data;
 }
 
+static int 
+send_info_frame_response(int fd, char addr, char* header, errorRead err)
+{
+        frameCmd cmd;
+        if (err == ERROR) 
+                cmd = (seqnum == 1) ? REJ_1 : REJ_0;
+        else if (err == DISCONNECT)
+                cmd = DISC;
+        else
+                cmd = (seqnum == 1) ? RR_0 : RR_1;
+        return send_frame_US(fd, cmd, addr);
+}
+
 int
 llread(int fd, char *buffer)
 {
@@ -304,9 +333,10 @@ llread(int fd, char *buffer)
         enum state st = START;
         struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
         char frame_header[4];
-        char frame[2*MAX_PACKET_SIZE];
+        char frame[MAX_PACKET_SIZE];
         char c_read;
-        int c = 0;
+        int c = 0, prev_seqnum = seqnum;
+        errorRead err = OK;
 
         while (st != STOP) {
                 poll(&pfd, 1, 0);
@@ -332,6 +362,9 @@ llread(int fd, char *buffer)
                         if (frame_header[st] == 0x00 || frame_header[st] == 0x70) {
                                 st = C_RCV;
                                 seqnum = (frame_header[st] >> 7) & 0x01;
+                        } else if (frame_header[st] == DISC) {
+                                st = C_RCV;
+                                err = DISCONNECT;  
                         } else if (frame_header[st] == FLAG) {
                                 st = FLAG_RCV;
                                 frame_header[0] = FLAG;
@@ -344,7 +377,7 @@ llread(int fd, char *buffer)
                         if (frame_header[st] == (frame[st-1] ^ frame[st-2])) {
                                 st = BCC_OK;
                         } else if (frame_header[st] == FLAG) {
-                                st = FLAG_RCV;
+                                st = (err == DISCONNECT) ? STOP : FLAG_RCV;
                                 frame_header[0] = FLAG;
                         } else {
                                 st = START;
@@ -363,9 +396,13 @@ llread(int fd, char *buffer)
 
         int len = sizeof(frame) - 1;
         buffer = destuff_data(frame, &len);
+        
+        err = (len == -1) ? ERROR : err;
+        send_info_frame_response(fd, RECEIVER, frame_header, err);
+        if (len < 0)
+            return err;
 
-        // still missing the resposnse
-
+        len = (prev_seqnum == seqnum) ? 0 : len;
         return len;
 }
 
@@ -373,6 +410,12 @@ llread(int fd, char *buffer)
 int
 llclose(int fd)
 {
+        if (connector == TRANSMITTER) {
+                send_frame_US(fd, DISC, TRANSMITTER);
+                read_frame_US(fd, (1 << DISC), RECEIVER);
+                send_frame_US(fd, UA, TRANSMITTER);
+        }
+
         sleep(2); /* Gives time to all the info flow througth the communication channel */
         return term_conf_end(fd);
 }

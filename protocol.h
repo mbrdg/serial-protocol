@@ -44,7 +44,8 @@ llwrite(int fd, char *buffer, int len);
 /***
  * Reads a given chunck of information in the file pointed by the first param
  * @param int[in] - file descriptor pointing to the file where information will be read
- * @param char *[in] - place where to place the information after performing the reading 
+ * @param char *[in] - place where to place the information after performing the reading
+ *                     WARNING: this buffer is dynamic allocated so free() must be called later
  * @param int[out] - number of bytes read
  */
 int
