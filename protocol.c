@@ -22,8 +22,9 @@ typedef enum { DISCONNECT = -2, ERROR = -1, OK = 0 } errorRead;
 
 /* global variables */
 static struct termios oldtio, newtio;
-static int filedscptr, retries = 0, seqnum = 0;
+static int filedscptr, retries = 0, seqnum = 0, temp_buffer_len;
 static char connector;
+static char *temp_buffer;
 
 static int 
 term_conf_init(int port)
@@ -160,7 +161,7 @@ exit_A_RCV:
 }
 
 void 
-transmitter_alrm_handler(int unused) 
+transmitter_alrm_handler_open(int unused) 
 {
         alarm(TIMEOUT);
         send_frame_US(filedscptr, SET, RECEIVER);
@@ -179,12 +180,13 @@ llopen_receiver(int fd)
 static int 
 llopen_transmitter(int fd)
 {
-        signal(SIGALRM, transmitter_alrm_handler);
+        signal(SIGALRM, transmitter_alrm_handler_open);
 
         alarm(TIMEOUT);
         send_frame_US(fd, SET, TRANSMITTER);
         read_frame_US(fd, (1 << UA), RECEIVER);
         alarm(0);
+        retries = 0;
 
         return 0;
 }
@@ -249,9 +251,18 @@ read_info_frame_response(int fd, char addr)
         return read_frame_US(fd, mask, addr);
 }
 
+static void 
+transmitter_alrm_handler_write(int unused)
+{
+        llwrite(filedscptr, temp_buffer, temp_buffer_len);
+}
+
 int
 llwrite(int fd, char *buffer, int len)
 {
+        temp_buffer = buffer;
+        temp_buffer_len = len;
+
         char *data;
         data = stuff_data(buffer, &len);
         if (data == NULL)
@@ -266,6 +277,7 @@ llwrite(int fd, char *buffer, int len)
         frame[len+5] = FLAG;
 
         free(data);
+        ++retries;
 
         int wb;
         if ((wb = write(fd, frame, len)) < 0) {
@@ -273,7 +285,12 @@ llwrite(int fd, char *buffer, int len)
                 return -1;
         }
 
+        signal(SIGALRM, transmitter_alrm_handler_write);
+
+        alarm(TIMEOUT);
         read_info_frame_response(fd, RECEIVER);
+        alarm(0);
+        retries = 0;
 
         return wb;
 }
