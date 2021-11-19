@@ -5,6 +5,7 @@
  * Author: Miguel Rodrigues & Nuno Castro
  */
 
+#include <stdint.h>
 #include <stdio.h>
 
 #include "protocol.h"
@@ -24,8 +25,8 @@ main (int argc, char **argv)
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
 
-        char fragment[MAX_PACKET_SIZE/2];
-        int fragment_len = MAX_PACKET_SIZE / 2 - 4, i;
+        uint8_t fragment[MAX_PACKET_SIZE/2];
+        uint32_t fragment_len = MAX_PACKET_SIZE / 2 - 4, i;
         if (fd_file > 0) {                
                 for (i = 0; read(fd_file, fragment + 4, fragment_len) > 0; i++) {
                         fragment[0] = 0x01;

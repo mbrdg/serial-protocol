@@ -208,7 +208,7 @@ llopen(int porta, uint8_t endpt)
 }
 
 
-static char *
+static uint8_t *
 stuff_data(uint8_t *buffer, uint32_t *len)
 {
         uint32_t i, inc;
@@ -276,7 +276,7 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
         frame[1] = TRANSMITTER;
         frame[2] = (seqnum & 0x01) << 7;
         frame[3] = frame[1] ^ frame[2];
-        strncpy(frame + 4, data, len);
+        memcpy(frame + 4, data, len);
         frame[len+5] = FLAG;
 
         free(data);
@@ -411,8 +411,8 @@ llread(int fd, uint8_t *buffer)
                 }
         }
 
-        int len = sizeof(frame) - 1;
-        buffer = destuff_data(frame, &len);
+        uint32_t len = sizeof(frame) - 1;
+        destuff_data(frame, &len);
         
         err = (len == -1) ? ERROR : err;
         send_info_frame_response(fd, RECEIVER, frame_header, err);

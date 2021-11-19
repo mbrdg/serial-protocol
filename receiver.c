@@ -5,6 +5,8 @@
  * Author: Miguel Rodrigues
  */
 
+#include <stdint.h>
+
 #include "protocol.h"
 
 int 
@@ -22,7 +24,7 @@ main(int argc, char **argv)
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
 
-        char *fragment = NULL;
+        uint8_t *fragment = NULL;
         int i, rb, len;
         if (fd_file > 0) {
                 for (i = 0; ; i++) {

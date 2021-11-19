@@ -40,7 +40,7 @@ llopen(int port, uint8_t endpt);
  * @param int[out] - number of bytes written
  */
 int
-llwrite(int fd, uint8_t *buffer, int len);
+llwrite(int fd, uint8_t *buffer, uint32_t len);
 
 /***
  * Reads a given chunck of information in the file pointed by the first param
