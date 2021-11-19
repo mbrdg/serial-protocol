@@ -22,12 +22,12 @@ typedef enum { DISCONNECT = -2, ERROR = -1, OK = 0 } errorRead;
 
 /* global variables */
 static struct termios oldtio, newtio;
-static int filedscptr, retries = 0, seqnum = 0, temp_buffer_len;
-static char connector;
-static char *temp_buffer;
+static int filedscptr;
+static uint32_t temp_buffer_len;
+static uint8_t connector, *temp_buffer, retries = 0, seqnum = 0;
 
 static int 
-term_conf_init(int port)
+term_conf_init(uint16_t port)
 {
         char filename[12];
         snprintf(filename, 12, "/dev/ttyS%d", port);
@@ -77,7 +77,7 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_US(int fd, int cmd, char addr) 
+send_frame_US(int fd, uint8_t cmd, uint8_t addr) 
 {
         unsigned char frame[5];
         frame[0] = FLAG;
@@ -92,17 +92,20 @@ send_frame_US(int fd, int cmd, char addr)
         }
 
         ++retries;
+        fprintf(stdout, "log: sent frame with %d @ %d\n", cmd, addr);
+
         return 0;
 }
 
 static int 
-read_frame_US(int fd, char cmd_mask, char addr)
+read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
 {
+        fprintf(stdout, "log: cmd_mask -> %d\n", cmd_mask);
+
         enum state { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, STOP };
         enum state st = START;
         struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
-        unsigned char frame[5];
-        int i;
+        uint8_t frame[5], i;
 
         while (st != STOP && retries < MAX_RETRIES) {
                 poll(&pfd, 1, 0);
@@ -192,7 +195,7 @@ llopen_transmitter(int fd)
 }
 
 int 
-llopen(int porta, char endpt)
+llopen(int porta, uint8_t endpt)
 {
         int fd;
         fd = term_conf_init(porta);
@@ -206,21 +209,21 @@ llopen(int porta, char endpt)
 
 
 static char *
-stuff_data(char *buffer, int *len)
+stuff_data(uint8_t *buffer, uint32_t *len)
 {
-        int i, inc;
+        uint32_t i, inc;
+        uint8_t bcc = buffer[0];
+        for (i = 1; i < (*len); i++)
+                bcc ^= buffer[i];
+
         for (i = 0; i < (*len); i++)
                 if (buffer[i] == ESCAPE || buffer[i] == FLAG)
                     inc++;
         
-        char bcc = buffer[0];
-        for (i = 1; i < (*len); i++)
-            bcc ^= buffer[i];
-
-        int nlen = (*len) + inc + 1;
+        uint8_t nlen = (*len) + inc + 1;
         nlen = (bcc == FLAG || bcc == ESCAPE) ? nlen + 1 : nlen;
 
-        char *data = (char *)malloc(nlen);
+        uint8_t *data = (uint8_t *)malloc(nlen);
         if (data == NULL) {
                 fprintf(stderr, "err: malloc() not enough memory\n");
                 return NULL;
@@ -245,9 +248,9 @@ stuff_data(char *buffer, int *len)
 }
 
 static int
-read_info_frame_response(int fd, char addr)
+read_info_frame_response(int fd, uint8_t addr)
 {
-        char mask = 1 << RR_0 | 1 << RR_1 | 1 << REJ_0 | 1 << REJ_1;
+        uint8_t mask = 1 << RR_0 | 1 << RR_1 | 1 << REJ_0 | 1 << REJ_1;
         return read_frame_US(fd, mask, addr);
 }
 
@@ -258,17 +261,17 @@ transmitter_alrm_handler_write(int unused)
 }
 
 int
-llwrite(int fd, char *buffer, int len)
+llwrite(int fd, uint8_t *buffer, uint32_t len)
 {
         temp_buffer = buffer;
         temp_buffer_len = len;
 
-        char *data;
+        uint8_t *data;
         data = stuff_data(buffer, &len);
         if (data == NULL)
             return -1;
 
-        char frame[len+6];
+        uint8_t frame[len+6];
         frame[0] = FLAG;
         frame[1] = TRANSMITTER;
         frame[2] = (seqnum & 0x01) << 7;
@@ -296,42 +299,41 @@ llwrite(int fd, char *buffer, int len)
 }
 
 
-static char *
-destuff_data(char *buffer, int *len)
+static int
+destuff_data(uint8_t *buffer, uint32_t *len)
 {
-        int i, inc;
+        uint32_t i, j, inc;
         for (i = 0; i < (*len); i++)
-            if (buffer[i] == ESCAPE)
-                inc++;
+            inc += (buffer[i] == ESCAPE);
 
-        int nlen = (*len) - inc;
-        char *data;
-        data = (char *)malloc(nlen);
+        uint32_t nlen = (*len) - inc;
+        uint8_t *data;
+        data = (uint8_t *)malloc(nlen);
         if (data == NULL) {
                 fprintf(stderr, "err: malloc() not enough memory\n");
-                (*len) = -1;
-                return NULL;
+                return -255;
         }
 
-        for (i = 0; i < (*len); i++) {
-                if (buffer[i] == ESCAPE) {
-                        data[i] = (buffer[i+1] == 0x5E) ? FLAG : ESCAPE;
-                        i++;
-                } else {
-                        data[i] = buffer[i];
-                }
+        for (i = 0, j = 0; i < (*len); j++, i++) {
+                if (buffer[i] == ESCAPE) 
+                        data[j] = (buffer[i+1] == 0x5E) ? FLAG : ESCAPE;
+                else
+                        data[j] = buffer[i];
+                i += (buffer[i] == ESCAPE);
+
         }
 
-        char bcc = data[0];
+        uint8_t bcc = data[0];
         for (i = 1; i < nlen - 1; i++)
             bcc ^= data[i];
         
-        (*len) = (bcc == data[nlen-1]) ? nlen : -1;
-        return data;
+        (*len) = (bcc == data[nlen-1]) ? nlen : 0;
+        buffer = data;
+        return -(bcc == data[nlen-1]);
 }
 
 static int 
-send_info_frame_response(int fd, char addr, char* header, errorRead err)
+send_info_frame_response(int fd, uint8_t addr, uint8_t* header, errorRead err)
 {
         frameCmd cmd;
         if (err == ERROR) 
@@ -344,15 +346,13 @@ send_info_frame_response(int fd, char addr, char* header, errorRead err)
 }
 
 int
-llread(int fd, char *buffer)
+llread(int fd, uint8_t *buffer)
 {
         enum state { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP };
         enum state st = START;
         struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
-        char frame_header[4];
-        char frame[MAX_PACKET_SIZE];
-        char c_read;
-        int c = 0, prev_seqnum = seqnum;
+        uint8_t frame_header[4], frame[MAX_PACKET_SIZE], c_read, prev_seqnum = seqnum;
+        uint32_t c = 0;
         errorRead err = OK;
 
         while (st != STOP) {

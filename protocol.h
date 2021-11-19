@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +30,7 @@
  * @param int[out] - file descriptor corresponding to the opened file 
  */
 int
-llopen(int port, char endpt);
+llopen(int port, uint8_t endpt);
 
 /***
  * Writes a given chunck of information in the file pointed by the first param
@@ -39,7 +40,7 @@ llopen(int port, char endpt);
  * @param int[out] - number of bytes written
  */
 int
-llwrite(int fd, char *buffer, int len);
+llwrite(int fd, uint8_t *buffer, int len);
 
 /***
  * Reads a given chunck of information in the file pointed by the first param
@@ -49,7 +50,7 @@ llwrite(int fd, char *buffer, int len);
  * @param int[out] - number of bytes read
  */
 int
-llread(int fd, char *buffer);
+llread(int fd, uint8_t *buffer);
 
 /***
  * Reverts to the previous terminal settings and shutdowns all the resources in use
