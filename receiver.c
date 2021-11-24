@@ -5,9 +5,14 @@
  * Author: Miguel Rodrigues
  */
 
+#include <errno.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
 
 #include "protocol.h"
+
+typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
 
 int 
 main(int argc, char **argv)
@@ -18,38 +23,39 @@ main(int argc, char **argv)
                 return 1;
         }
 
+        int fd_file;
+        fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
+        if (fd_file < 0) {
+                fprintf(stderr, "err: open() -> code: %d\n", errno);
+                return -1;
+        }
+
         int fd;
         fd = llopen(atoi(argv[1]), RECEIVER);
 
-        int fd_file;
-        fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
+        uint8_t fragment[MAX_PACKET_SIZE];
+        while (1) {
+                ssize_t rb;
+                rb = llread(fd, fragment);
+                if (rb < 0)
+                        continue;
 
-        uint8_t *fragment = NULL;
-        int i, rb, len;
-        if (fd_file > 0) {
-                for (i = 0; ; i++) {
-                        rb = llread(fd, fragment);
-                        if (rb == -2)
-                            break;
-                        
-                        switch (fragment[0]) {
-                        case 0x01:
-                                len = fragment[2] * 256 + fragment[3];
-                                write(fd_file, fragment + 4, len);
-                                free(fragment);
-                                break;
-                        case 0x02:
-                                break;
-                        case 0x03:
-                                break;
-                        default:
-                                break;
-                        }
+                uint32_t len;
+                switch (fragment[0]) {
+                case DATA:
+                        len = fragment[2] * 256 + fragment[3];
+                        write(fd_file, fragment + 4, len);
+                        break;
+                case START:
+                        break;
+                case STOP:
+                        llclose(fd);
+                        close(fd_file);
+                        return 0;
+                default:
+                        break;
                 }
         }
-
-        close(fd_file);
-        llclose(fd);
 
         return 0;
 }

@@ -21,7 +21,7 @@
 #define RECEIVER 0x01
 #define TRANSMITTER 0x03
 
-#define MAX_PACKET_SIZE 1024
+#define MAX_PACKET_SIZE 250
 
 /***
  * Sets up the terminal, in order to send information packets
@@ -37,9 +37,9 @@ llopen(int port, uint8_t endpt);
  * @param int[in] - file descriptor pointing to the file where information will be written
  * @param char *[in] - information to be written
  * @param int[in] - size in bytes of the chunck of information 
- * @param int[out] - number of bytes written
+ * @param ssize_t[out] - number of bytes written
  */
-int
+ssize_t
 llwrite(int fd, uint8_t *buffer, uint32_t len);
 
 /***
@@ -47,9 +47,9 @@ llwrite(int fd, uint8_t *buffer, uint32_t len);
  * @param int[in] - file descriptor pointing to the file where information will be read
  * @param char *[in] - place where to place the information after performing the reading
  *                     WARNING: this buffer is dynamic allocated so free() must be called later
- * @param int[out] - number of bytes read
+ * @param ssize_t[out] - number of bytes read
  */
-int
+ssize_t
 llread(int fd, uint8_t *buffer);
 
 /***

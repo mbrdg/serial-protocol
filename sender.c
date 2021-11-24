@@ -5,10 +5,17 @@
  * Author: Miguel Rodrigues & Nuno Castro
  */
 
+#include <sys/stat.h>
+
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 #include "protocol.h"
+
+typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
+typedef enum { SIZE, NAME } paramCmd;
 
 int
 main (int argc, char **argv)
@@ -19,27 +26,54 @@ main (int argc, char **argv)
                 return 1;
         }
 
+        int fd_file;
+        fd_file = open(argv[2], O_RDONLY);
+        if (fd_file < 0) {
+                fprintf(stderr, "err: open() -> code: %d\n", errno);
+                return -1;
+        }
+
         int fd;
         fd = llopen(atoi(argv[1]), TRANSMITTER);
 
-        int fd_file;
-        fd_file = open(argv[2], O_RDONLY);
+        uint8_t fragment[MAX_PACKET_SIZE];
 
-        uint8_t fragment[MAX_PACKET_SIZE/2];
-        uint32_t fragment_len = MAX_PACKET_SIZE / 2 - 4, i;
-        if (fd_file > 0) {                
-                for (i = 0; read(fd_file, fragment + 4, fragment_len) > 0; i++) {
-                        fragment[0] = 0x01;
-                        fragment[1] = i % 255;
-                        fragment[2] = fragment_len / 256;
-                        fragment[3] = fragment_len % 256;
+        struct stat st;
+        fstat(fd_file, &st);
+        const off_t size_file = st.st_size;
 
-                        llwrite(fd, fragment, MAX_PACKET_SIZE / 2);
-                }
+        fragment[0] = START;
+        fragment[1] = SIZE;
+        fragment[2] = sizeof(off_t);
+        memcpy(fragment + 3, &size_file, sizeof(off_t));
+        llwrite(fd, fragment, 3 + sizeof(off_t));
+
+        uint32_t n;
+        n = size_file / (MAX_PACKET_SIZE - 4);
+        if (size_file % (MAX_PACKET_SIZE - 4))
+                n++;
+
+        ssize_t rb;
+        int i;
+        for (i = 0; i < n; i++) {
+                rb = read(fd_file, fragment + 4, MAX_PACKET_SIZE - 4);    
+
+                fragment[0] = DATA;
+                fragment[1] = i % 255;
+                fragment[2] = rb / 256;
+                fragment[3] = rb % 256;
+
+                llwrite(fd, fragment, rb + 4);
         }
-        
-        close(fd_file);
+
+        fragment[0] = STOP;
+        fragment[1] = SIZE;
+        fragment[2] = sizeof(off_t);
+        memcpy(fragment + 3, &size_file, sizeof(off_t));
+        llwrite(fd, fragment, 3 + sizeof(off_t));
+
         llclose(fd);
+        close(fd_file);
 
         return 0;
 }
