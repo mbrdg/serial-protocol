@@ -97,7 +97,7 @@ send_frame_US(int fd, uint8_t cmd, uint8_t addr)
                 return -1;
         }
 
-        // ++retries;
+        ++retries;
         fprintf(stdout, "log: sent frame with %s @ %s\n", cmds_str[cmd], 
                 (addr == TRANSMITTER) ? "TRANSMITTER" : "RECEIVER");
         return 0;
@@ -107,18 +107,18 @@ static int
 read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
 {
         readState st = START;
-        struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
+        // struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
         uint8_t frame[5];
         int i, j;
 
         while (st != STOP && retries < MAX_RETRIES) {
-                poll(&pfd, 1, 0);
-                if (pfd.revents & POLLIN) {
+                // poll(&pfd, 1, 0);
+                // if (pfd.revents & POLLIN) {
                         if (read(fd, frame + st, 1) == -1) {
                                 fprintf(stderr, "err: read() code: %d\n", errno);
                                 return -1;
                         }
-                }
+                // }
 
                 switch (st) {
                 case START:
@@ -161,10 +161,10 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                 }
         }
 
-         if (connector == TRANSMITTER) {
-                if (frame[2] == cmds[RR_1] || frame[2] == cmds[REJ_1])
+        if (connector == TRANSMITTER) {
+                if (frame[2] == cmds[RR_1] || frame[2] == cmds[REJ_0])
                         sequence_number = 0x40;
-                else if (frame[2] == cmds[RR_0] || frame[2] == cmds[REJ_0])
+                else if (frame[2] == cmds[RR_0] || frame[2] == cmds[REJ_1])
                         sequence_number = 0x0;
         }
         
@@ -263,6 +263,20 @@ encode_data(uint8_t **dest, const uint8_t *src, uint32_t len)
         return nlen;
 }
 
+static ssize_t
+decode_data(uint8_t *dest, const uint8_t *src, uint32_t len)
+{
+        ssize_t i, j;
+        uint32_t dec = 0;
+        for (i = 0; i < len; i++)
+                dec += IS_ESCAPE(src[i]);
+
+        for (i = 0, j = 0; j < len - dec; i++, j++)
+            dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ 0x20) : src[i];
+
+        return len - dec;
+}
+
 ssize_t
 llwrite(int fd, uint8_t *buffer, uint32_t len)
 {
@@ -305,39 +319,24 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
 }
 
 
-static ssize_t
-decode_data(uint8_t *dest, const uint8_t *src, uint32_t len)
-{
-        ssize_t i, j;
-        uint32_t dec = 0;
-        for (i = 0; i < len; i++)
-                dec += IS_ESCAPE(src[i]);
-
-        for (i = 0, j = 0; j < len - dec; i++, j++)
-                dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ 0x20) : src[i];
-
-        return len - dec;
-}
-
 ssize_t
 llread(int fd, uint8_t *buffer)
 {
-        sleep(1);
         readState st = START;
-        struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
+        //struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
 
         uint8_t frame[2*MAX_PACKET_SIZE+5];
-        uint8_t disconnect = 0;
+        uint8_t disc = 0;
         uint32_t c = 0;
 
         while (st != STOP) {
-                poll(&pfd, 1, 0);
-                if (pfd.revents & POLLIN) {
+                //poll(&pfd, 1, 0);
+                //if (pfd.revents & POLLIN) {
                         if (read(fd, frame + st + c, 1) < 0) {
                                 fprintf(stderr, "err: read() -> code: %d\n", errno);
                                 return -1;
                         }
-                }
+                //}
 
                 switch (st) {
                 case START:
@@ -350,12 +349,12 @@ llread(int fd, uint8_t *buffer)
                                 st = START;
                         break;
                 case A_RCV:
-                        if (frame[st] == 0x0 || frame[st] == (1 << 6)) {
-                                printf("seq_num: %d\n", sequence_number);
+                        if (frame[st] == 0x0 || frame[st] == 0x40) {
+                                sequence_number = !frame[st];
                                 st = C_RCV;
                         } else if (frame[st] == cmds[DISC]) {
                                 st = C_RCV;
-                                disconnect = 1;
+                                disc = 1;
                         } else if (IS_FLAG(frame[st])) {
                                 st = FLAG_RCV;
                                 frame[0] = FLAG;
@@ -385,7 +384,7 @@ llread(int fd, uint8_t *buffer)
                 }
         }
 
-        if (disconnect) {
+        if (disc) {
                 fprintf(stdout, "log: disconnect frame detected\n");
                 send_frame_US(fd, DISC, RECEIVER);
                 return -1;
@@ -403,12 +402,9 @@ llread(int fd, uint8_t *buffer)
         fprintf(stdout, "log: bcc = %02x, expected_bcc = %02x\n", bcc, expected_bcc);
 
         uint8_t cmd;
+        cmd = sequence_number ? RR_1 : RR_0;
         if (bcc != expected_bcc)
                 cmd = sequence_number ? REJ_1 : REJ_0;
-        else
-                cmd = sequence_number ? RR_0 : RR_1;
-
-        sequence_number = !sequence_number;
 
         send_frame_US(fd, cmd, RECEIVER);
         return (bcc == expected_bcc) ? len : -1;

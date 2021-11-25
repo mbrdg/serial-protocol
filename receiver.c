@@ -33,6 +33,7 @@ main(int argc, char **argv)
         int fd;
         fd = llopen(atoi(argv[1]), RECEIVER);
 
+        uint8_t pkgn = 0;
         uint8_t fragment[MAX_PACKET_SIZE];
         while (1) {
                 ssize_t rb;
@@ -43,20 +44,25 @@ main(int argc, char **argv)
                 uint32_t len;
                 switch (fragment[0]) {
                 case DATA:
-                        len = fragment[2] * 256 + fragment[3];
-                        write(fd_file, fragment + 4, len);
+                        if (fragment[1] >= (pkgn % 255)) {
+                                len = fragment[2] * 256 + fragment[3];
+                                write(fd_file, fragment + 4, len);
+                                ++pkgn;
+                        }
                         break;
                 case START:
                         break;
                 case STOP:
-                        llclose(fd);
-                        close(fd_file);
-                        return 0;
+                        llread(fd, fragment);   // Take the last disc frame
+                        goto finish;
                 default:
                         break;
                 }
         }
-
+        
+finish:
+        llclose(fd);
+        close(fd_file);
         return 0;
 }
 
