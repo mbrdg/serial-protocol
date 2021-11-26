@@ -32,6 +32,10 @@ main(int argc, char **argv)
 
         int fd;
         fd = llopen(atoi(argv[1]), RECEIVER);
+        if (fd < 0) {
+                fprintf(stderr, "err: llopen() -> aborting...\n");
+                return -1;
+        }
 
         uint8_t pkgn = 0;
         uint8_t fragment[MAX_PACKET_SIZE];

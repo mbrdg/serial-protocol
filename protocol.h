@@ -30,7 +30,7 @@
  * @param int[out] - file descriptor corresponding to the opened file 
  */
 int
-llopen(int port, uint8_t endpt);
+llopen(int port, const uint8_t endpt);
 
 /***
  * Writes a given chunck of information in the file pointed by the first param

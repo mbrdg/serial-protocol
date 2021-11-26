@@ -35,6 +35,10 @@ main (int argc, char **argv)
 
         int fd;
         fd = llopen(atoi(argv[1]), TRANSMITTER);
+        if (fd < 0) {
+                fprintf(stderr, "err: llopen() -> aborting...\n");
+                return -1;
+        }
 
         uint8_t fragment[MAX_PACKET_SIZE];
 
@@ -46,7 +50,8 @@ main (int argc, char **argv)
         fragment[1] = SIZE;
         fragment[2] = sizeof(off_t);
         memcpy(fragment + 3, &size_file, sizeof(off_t));
-        llwrite(fd, fragment, 3 + sizeof(off_t));
+        if (llwrite(fd, fragment, 3 + sizeof(off_t)) < 0)
+                goto llwrite_error;    
 
         uint32_t n;
         n = size_file / (MAX_PACKET_SIZE - 4);
@@ -63,18 +68,24 @@ main (int argc, char **argv)
                 fragment[2] = rb / 256;
                 fragment[3] = rb % 256;
 
-                llwrite(fd, fragment, rb + 4);
+                if (llwrite(fd, fragment, rb + 4) < 0)
+                        goto llwrite_error;
         }
 
         fragment[0] = STOP;
         fragment[1] = SIZE;
         fragment[2] = sizeof(off_t);
         memcpy(fragment + 3, &size_file, sizeof(off_t));
-        llwrite(fd, fragment, 3 + sizeof(off_t));
+        if (llwrite(fd, fragment, 3 + sizeof(off_t)) < 0)
+                goto llwrite_error;
 
         llclose(fd);
         close(fd_file);
 
         return 0;
+
+llwrite_error:
+        fprintf(stderr, "err: llwrite() -> aborting...\n");
+        return -1;
 }
 

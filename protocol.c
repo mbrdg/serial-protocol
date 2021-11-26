@@ -29,6 +29,7 @@ typedef enum { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP } readState;
 
 /* global variables */
 static struct termios oldtio, newtio;
+static struct sigaction sigact;
 static int port_fd;
 static uint8_t connector, sequence_number = 0x0, retries = 0;
 
@@ -84,7 +85,7 @@ term_conf_end(int fd)
 
 static int
 send_frame_US(int fd, uint8_t cmd, uint8_t addr) 
-{
+{        
         unsigned char frame[5];
         frame[0] = FLAG;
         frame[1] = addr;
@@ -97,7 +98,6 @@ send_frame_US(int fd, uint8_t cmd, uint8_t addr)
                 return -1;
         }
 
-        ++retries;
         fprintf(stdout, "log: sent frame with %s @ %s\n", cmds_str[cmd], 
                 (addr == TRANSMITTER) ? "TRANSMITTER" : "RECEIVER");
         return 0;
@@ -107,18 +107,16 @@ static int
 read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
 {
         readState st = START;
-        // struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
         uint8_t frame[5];
         int i, j;
+        ssize_t rb;
 
         while (st != STOP && retries < MAX_RETRIES) {
-                // poll(&pfd, 1, 0);
-                // if (pfd.revents & POLLIN) {
-                        if (read(fd, frame + st, 1) == -1) {
-                                fprintf(stderr, "err: read() code: %d\n", errno);
-                                return -1;
-                        }
-                // }
+                rb = read(fd, frame + st, 1);
+                if (rb < 0)
+                        return -1;
+                if (!rb)
+                        continue;
 
                 switch (st) {
                 case START:
@@ -167,19 +165,29 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                 else if (frame[2] == cmds[RR_0] || frame[2] == cmds[REJ_1])
                         sequence_number = 0x0;
         }
-        
+
         fprintf(stdout, "log: read frame with %s @ %s\n", cmds_str[j], 
                 (addr == TRANSMITTER) ? "TRANSMITTER" : "RECEIVER");
-        return 0;
+        return -(retries >= MAX_RETRIES);
+}
+
+
+static void
+install_sigalrm(void (*handler)(int))
+{
+        sigact.sa_handler = handler;
+        sigemptyset(&sigact.sa_mask);
+        sigact.sa_flags = 0;
+        sigaction(SIGALRM, &sigact, NULL);
 }
 
 void 
 transmitter_alrm_handler_open(int unused) 
 {
         alarm(TIMEOUT);
-        send_frame_US(port_fd, SET, RECEIVER);
+        retries++;
+        send_frame_US(port_fd, SET, TRANSMITTER);
 }
-
 
 static int 
 llopen_receiver(int fd)
@@ -193,38 +201,37 @@ llopen_receiver(int fd)
 static int 
 llopen_transmitter(int fd)
 {
-        signal(SIGALRM, transmitter_alrm_handler_open);
-
+        install_sigalrm(transmitter_alrm_handler_open);
         alarm(TIMEOUT);
+
         send_frame_US(fd, SET, TRANSMITTER);
-        read_frame_US(fd, (1 << UA), RECEIVER);
+        int rf;
+        rf = read_frame_US(fd, (1 << UA), RECEIVER);
+
         alarm(0);
         retries = 0;
 
-        return 0;
+        return rf;
 }
 
 int 
-llopen(int port, uint8_t endpt)
+llopen(int port, const uint8_t endpt)
 {
         int fd;
         fd = term_conf_init(port);
         if (fd < 0)
                 return -1;
         
+        int open;
+        open = (endpt == TRANSMITTER) ? llopen_transmitter(fd) :
+                                        llopen_receiver(fd);
+        if (open < 0)
+                return -1;
+
         connector = endpt;
-        connector == RECEIVER ? llopen_receiver(fd) : llopen_transmitter(fd);
         return fd;
 }
 
-
-/*
-static void 
-transmitter_alrm_handler_write(int unused)
-{
-        //llwrite(port_fd, temp_buffer, temp_buffer_len);
-}
-*/
 
 static void
 encode_cpy(uint8_t *dest, uint32_t offset, uint8_t c) {
@@ -296,7 +303,6 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
         memcpy(frame + 4, data, len);
         free(data);
 
-        printf("log: bcc: %02x, seq_num: %02x\n", frame[len+3], frame[2]);
         // ++retries;
         ssize_t wb;
         if ((wb = write(fd, frame, sizeof(frame))) < 0) {
@@ -323,20 +329,15 @@ ssize_t
 llread(int fd, uint8_t *buffer)
 {
         readState st = START;
-        //struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
-
         uint8_t frame[2*MAX_PACKET_SIZE+5];
         uint8_t disc = 0;
         uint32_t c = 0;
 
         while (st != STOP) {
-                //poll(&pfd, 1, 0);
-                //if (pfd.revents & POLLIN) {
-                        if (read(fd, frame + st + c, 1) < 0) {
-                                fprintf(stderr, "err: read() -> code: %d\n", errno);
-                                return -1;
-                        }
-                //}
+                if (read(fd, frame + st + c, 1) < 0) {
+                        fprintf(stderr, "err: read() -> code: %d\n", errno);
+                        return -1;
+                }
 
                 switch (st) {
                 case START:
@@ -399,8 +400,6 @@ llread(int fd, uint8_t *buffer)
         for (i = 1; i < len - 1; i++)
                 bcc ^= buffer[i];
 
-        fprintf(stdout, "log: bcc = %02x, expected_bcc = %02x\n", bcc, expected_bcc);
-
         uint8_t cmd;
         cmd = sequence_number ? RR_1 : RR_0;
         if (bcc != expected_bcc)
@@ -410,13 +409,25 @@ llread(int fd, uint8_t *buffer)
         return (bcc == expected_bcc) ? len : -1;
 }
 
+void 
+transmitter_alrm_handler_close(int unused) 
+{
+        alarm(TIMEOUT);
+        retries++;
+        send_frame_US(port_fd, DISC, RECEIVER);
+}
 
 int
 llclose(int fd)
 {
         if (connector == TRANSMITTER) {
+                install_sigalrm(transmitter_alrm_handler_close);
+            
                 send_frame_US(fd, DISC, TRANSMITTER);
+                alarm(TIMEOUT);
                 read_frame_US(fd, (1 << DISC), RECEIVER);
+                alarm(0);
+
                 send_frame_US(fd, UA, TRANSMITTER);
         }
 
