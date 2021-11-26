@@ -30,8 +30,13 @@ typedef enum { START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STOP } readState;
 /* global variables */
 static struct termios oldtio, newtio;
 static struct sigaction sigact;
+
 static int port_fd;
-static uint8_t connector, sequence_number = 0x0, retries = 0;
+static uint8_t connector;
+static volatile uint32_t sequence_number = 0x0, retries = 0;
+
+static uint8_t buffer_frame[2*MAX_PACKET_SIZE+5];
+static uint32_t buffer_frame_size;
 
 static int 
 term_conf_init(int port)
@@ -283,6 +288,24 @@ decode_data(uint8_t *dest, const uint8_t *src, uint32_t len)
         return len - dec;
 }
 
+static ssize_t
+write_data(void)
+{
+        ssize_t wb;
+        if ((wb = write(port_fd, buffer_frame, buffer_frame_size)) < 0)
+                fprintf(stderr, "err: read() -> code: %d\n", errno);
+
+        return wb;
+}
+
+void
+transmitter_alrm_handler_write() 
+{
+        alarm(TIMEOUT);
+        ++retries;
+        write_data();
+}
+
 ssize_t
 llwrite(int fd, uint8_t *buffer, uint32_t len)
 {
@@ -291,7 +314,7 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
                 fprintf(stderr, "err: encode_data() -> code: %d\n", len);
                 return len;
         }
-        fprintf(stdout, "log: frame no. %d of length %d ready to be sent\n", sequence_number, len);
+        fprintf(stdout, "log: frame no. %d of length %d ready to be sent\n", sequence_number >> 6, len);
 
         uint8_t frame[len+5];
         frame[0] = frame[len+4] = FLAG;
@@ -302,22 +325,24 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
         memcpy(frame + 4, data, len);
         free(data);
 
-        // ++retries;
-        ssize_t wb;
-        if ((wb = write(fd, frame, sizeof(frame))) < 0) {
-                fprintf(stderr, "err: read() -> code: %d\n", errno);
-                return -1;
-        }
+        memcpy(buffer_frame, frame, len + 5);
+        buffer_frame_size = len + 5;
+        retries = 0;
 
-        fprintf(stdout, "log: frame no. %d of length %d sent -> wb: %ld\n", sequence_number, len, wb);
-        fprintf(stdout, "log: waiting on response from RECEIVER for frame no. %d\n", sequence_number);
-        // signal(SIGALRM, transmitter_alrm_handler_write);
-        // alarm(TIMEOUT);
+        ssize_t wb;
+        if ((wb = write_data()) < 0)
+                return -1;
+
+        fprintf(stdout, "log: frame no. %d of length %d sent -> wb: %ld\n", sequence_number >> 6, len, wb);
+        fprintf(stdout, "log: waiting on response from RECEIVER for frame no. %d\n", sequence_number >> 6);
+        
+        install_sigalrm(transmitter_alrm_handler_write);
+        alarm(TIMEOUT);
 
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
         read_frame_US(fd, mask, RECEIVER);
 
-        // alarm(0);
+        alarm(0);
         retries = 0;
 
         return wb;
