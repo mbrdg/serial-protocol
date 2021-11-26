@@ -201,16 +201,15 @@ llopen_receiver(int fd)
 static int 
 llopen_transmitter(int fd)
 {
-        install_sigalrm(transmitter_alrm_handler_open);
-        alarm(TIMEOUT);
-
-        send_frame_US(fd, SET, TRANSMITTER);
         int rf;
+        install_sigalrm(transmitter_alrm_handler_open);
+        send_frame_US(fd, SET, TRANSMITTER);
+
+        alarm(TIMEOUT);
         rf = read_frame_US(fd, (1 << UA), RECEIVER);
-
         alarm(0);
-        retries = 0;
 
+        retries = 0;
         return rf;
 }
 
