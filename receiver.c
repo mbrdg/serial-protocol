@@ -45,7 +45,7 @@ main(int argc, char **argv)
                 if (rb < 0)
                         continue;
 
-                uint32_t len;
+                uint16_t len;
                 switch (fragment[0]) {
                 case DATA:
                         if (fragment[1] >= (pkgn % 255)) {

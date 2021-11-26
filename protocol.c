@@ -14,6 +14,7 @@
 
 #define FLAG 0x7E
 #define ESCAPE 0x7D
+#define KEY 0x20
 
 #define IS_ESCAPE(c) (c == ESCAPE)
 #define IS_FLAG(c) (c == FLAG)
@@ -33,10 +34,10 @@ static struct sigaction sigact;
 
 static int port_fd;
 static uint8_t connector;
-static volatile uint32_t sequence_number = 0x0, retries = 0;
+static volatile uint8_t sequence_number = 0x0, retries = 0;
 
 static uint8_t buffer_frame[2*MAX_PACKET_SIZE+5];
-static uint32_t buffer_frame_size;
+static ssize_t buffer_frame_size;
 
 static int 
 term_conf_init(int port)
@@ -238,17 +239,17 @@ llopen(int port, const uint8_t endpt)
 
 
 static void
-encode_cpy(uint8_t *dest, uint32_t offset, uint8_t c) {
+encode_cpy(uint8_t *dest, ssize_t offset, uint8_t c) {
         if (ESCAPED_BYTE(c)) {
                 dest[offset] = ESCAPE;
-                dest[offset+1] = c ^ 0x20;
+                dest[offset+1] = c ^ KEY;
         } else {
                 dest[offset] = c;
         }
 }
 
 static ssize_t
-encode_data(uint8_t **dest, const uint8_t *src, uint32_t len)
+encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
 {
         int i;
         uint8_t bcc = src[0];
@@ -259,7 +260,7 @@ encode_data(uint8_t **dest, const uint8_t *src, uint32_t len)
         for (i = 0; i < len; i++)
                 inc += ESCAPED_BYTE(src[i]);
         
-        uint32_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
+        ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
         *dest = (uint8_t *)malloc(nlen);
         if (dest == NULL) {
                 fprintf(stderr, "err: malloc() -> code: %d\n", errno);
@@ -275,15 +276,15 @@ encode_data(uint8_t **dest, const uint8_t *src, uint32_t len)
 }
 
 static ssize_t
-decode_data(uint8_t *dest, const uint8_t *src, uint32_t len)
+decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
 {
         ssize_t i, j;
-        uint32_t dec = 0;
+        uint16_t dec = 0;
         for (i = 0; i < len; i++)
                 dec += IS_ESCAPE(src[i]);
 
         for (i = 0, j = 0; j < len - dec; i++, j++)
-            dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ 0x20) : src[i];
+            dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ KEY) : src[i];
 
         return len - dec;
 }
@@ -307,14 +308,14 @@ transmitter_alrm_handler_write()
 }
 
 ssize_t
-llwrite(int fd, uint8_t *buffer, uint32_t len)
+llwrite(int fd, uint8_t *buffer, ssize_t len)
 {
         uint8_t *data = NULL;
         if ((len = encode_data(&data, buffer, len)) < 0) {
-                fprintf(stderr, "err: encode_data() -> code: %d\n", len);
+                fprintf(stderr, "err: encode_data() -> code: %ld\n", len);
                 return len;
         }
-        fprintf(stdout, "log: frame no. %d of length %d ready to be sent\n", sequence_number >> 6, len);
+        fprintf(stdout, "log: frame no. %d of length %ld ready to be sent\n", sequence_number >> 6, len);
 
         uint8_t frame[len+5];
         frame[0] = frame[len+4] = FLAG;
@@ -333,7 +334,7 @@ llwrite(int fd, uint8_t *buffer, uint32_t len)
         if ((wb = write_data()) < 0)
                 return -1;
 
-        fprintf(stdout, "log: frame no. %d of length %d sent -> wb: %ld\n", sequence_number >> 6, len, wb);
+        fprintf(stdout, "log: frame no. %d of length %ld sent -> wb: %ld\n", sequence_number >> 6, len, wb);
         fprintf(stdout, "log: waiting on response from RECEIVER for frame no. %d\n", sequence_number >> 6);
         
         install_sigalrm(transmitter_alrm_handler_write);
@@ -355,7 +356,7 @@ llread(int fd, uint8_t *buffer)
         readState st = START;
         uint8_t frame[2*MAX_PACKET_SIZE+5];
         uint8_t disc = 0;
-        uint32_t c = 0;
+        uint16_t c = 0;
 
         while (st != STOP) {
                 if (read(fd, frame + st + c, 1) < 0) {
@@ -415,22 +416,22 @@ llread(int fd, uint8_t *buffer)
                 return -1;
         }
 
-        uint32_t len;
+        ssize_t len;
         len = decode_data(buffer, frame + 4, c);
 
         int i;
-        const uint8_t expected_bcc = buffer[len-1];
+        const uint8_t expect_bcc = buffer[len-1];
         uint8_t bcc = buffer[0];
         for (i = 1; i < len - 1; i++)
                 bcc ^= buffer[i];
 
         uint8_t cmd;
         cmd = sequence_number ? RR_1 : RR_0;
-        if (bcc != expected_bcc)
+        if (bcc != expect_bcc)
                 cmd = sequence_number ? REJ_1 : REJ_0;
 
         send_frame_US(fd, cmd, RECEIVER);
-        return (bcc == expected_bcc) ? len : -1;
+        return (bcc == expect_bcc) ? len : -1;
 }
 
 void 
@@ -448,6 +449,7 @@ llclose(int fd)
                 install_sigalrm(transmitter_alrm_handler_close);
             
                 send_frame_US(fd, DISC, TRANSMITTER);
+
                 alarm(TIMEOUT);
                 read_frame_US(fd, (1 << DISC), RECEIVER);
                 alarm(0);

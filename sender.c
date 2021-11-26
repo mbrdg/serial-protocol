@@ -53,7 +53,7 @@ main (int argc, char **argv)
         if (llwrite(fd, fragment, 3 + sizeof(off_t)) < 0)
                 goto llwrite_error;    
 
-        uint32_t n;
+        uint16_t n;
         n = size_file / (MAX_PACKET_SIZE - 4);
         if (size_file % (MAX_PACKET_SIZE - 4))
                 n++;

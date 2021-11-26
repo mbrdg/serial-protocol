@@ -25,7 +25,7 @@
 /***
  * Sets up the terminal, in order to send information packets
  * @param int[in] - port x corresponding to the file /dev/ttySx
- * @param char[in] - determines whether is the RECEIVER or TRANSMITTER called
+ * @param const uint8_t[in] - determines whether is the RECEIVER or TRANSMITTER called
  * @param int[out] - file descriptor corresponding to the opened file 
  */
 int
@@ -34,18 +34,17 @@ llopen(int port, const uint8_t endpt);
 /***
  * Writes a given chunck of information in the file pointed by the first param
  * @param int[in] - file descriptor pointing to the file where information will be written
- * @param char *[in] - information to be written
- * @param int[in] - size in bytes of the chunck of information 
+ * @param uint8_t *[in] - information to be written
+ * @param ssize_t[in] - size in bytes of the chunck of information 
  * @param ssize_t[out] - number of bytes written
  */
 ssize_t
-llwrite(int fd, uint8_t *buffer, uint32_t len);
+llwrite(int fd, uint8_t *buffer, ssize_t len);
 
 /***
  * Reads a given chunck of information in the file pointed by the first param
  * @param int[in] - file descriptor pointing to the file where information will be read
- * @param char *[in] - place where to place the information after performing the reading
- *                     WARNING: this buffer is dynamic allocated so free() must be called later
+ * @param uint8_t *[in] - place where to place the information after performing the reading
  * @param ssize_t[out] - number of bytes read
  */
 ssize_t
