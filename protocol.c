@@ -20,6 +20,8 @@
 #define IS_FLAG(c) (c == FLAG)
 #define ESCAPED_BYTE(c) (IS_ESCAPE(c) || IS_FLAG(c))
 
+#define BIT_SET(m, i) (m & (0x1 << i))
+
 /* commands */ 
 typedef enum { SET, DISC, UA, RR_0 , REJ_0, RR_1, REJ_1 } frameCmd;
 static const uint8_t cmds[7] = { 0x3, 0xB, 0x7, 0x5, 0x1, 0x85, 0x81 };
@@ -33,11 +35,24 @@ static struct termios oldtio, newtio;
 static struct sigaction sigact;
 
 static int port_fd;
+
 static uint8_t connector;
-static volatile uint8_t sequence_number = 0x0, retries = 0;
+static volatile uint8_t retries, sequence_number = 0x0;
+static int connection_alive;
 
 static uint8_t buffer_frame[2*MAX_PACKET_SIZE+5];
-static ssize_t buffer_frame_size;
+static ssize_t buffer_frame_len;
+
+/* util funcs */
+static void
+install_sigalrm(void (*handler)(int))
+{
+        sigact.sa_handler = handler;
+        sigemptyset(&sigact.sa_mask);
+        sigact.sa_flags = 0;
+        sigaction(SIGALRM, &sigact, NULL);
+}
+
 
 static int 
 term_conf_init(int port)
@@ -63,8 +78,8 @@ term_conf_init(int port)
         newtio.c_oflag = 0;
         newtio.c_lflag = 0; /* set input mode (non-canonical, no echo...) */
 
-        newtio.c_cc[VTIME] = 0;
-        newtio.c_cc[VMIN] = 1;
+        newtio.c_cc[VTIME] = 0; 
+        newtio.c_cc[VMIN] = 1; /* 1 char required to satisfy a read */
 
         tcflush(port_fd, TCIOFLUSH);
         if (tcsetattr(port_fd, TCSANOW, &newtio) == -1) {
@@ -72,7 +87,7 @@ term_conf_init(int port)
                 return -1;
         }
 
-        fprintf(stdout, "log: new term attributes set\n");
+        fprintf(stdout, "log: new termios attributes set\n");
         return port_fd;
 }
 
@@ -93,19 +108,19 @@ static int
 send_frame_US(int fd, uint8_t cmd, uint8_t addr) 
 {        
         unsigned char frame[5];
-        frame[0] = FLAG;
+
+        frame[0] = frame[4] = FLAG;
         frame[1] = addr;
         frame[2] = cmds[cmd];
         frame[3] = frame[1] ^ frame[2];
-        frame[4] = FLAG;
 
         if (write(fd, frame, sizeof(frame)) < 0) {
                 fprintf(stderr, "err: write() code: %d\n", errno);
                 return -1;
         }
 
-        fprintf(stdout, "log: sent frame with %s @ %s\n", cmds_str[cmd], 
-                (addr == TRANSMITTER) ? "TRANSMITTER" : "RECEIVER");
+        fprintf(stdout, "log: frame sent with %s @ %s\n", cmds_str[cmd],
+                            (addr == TRANSMITTER) ? "TRMT" : "RECV");
         return 0;
 }
 
@@ -114,14 +129,11 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
 {
         readState st = START;
         uint8_t frame[5];
-        int i, j;
-        ssize_t rb;
+        ssize_t i, j, rb;
 
         while (st != STOP && retries < MAX_RETRIES) {
                 rb = read(fd, frame + st, 1);
-                if (rb < 0)
-                        return -1;
-                if (!rb)
+                if (rb < 0 && errno == EINTR)
                         continue;
 
                 switch (st) {
@@ -136,7 +148,7 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                         break;
                 case A_RCV:
                         for (i = 0; i < 7; i++) {
-                                if ((cmd_mask & (0x01 << i)) && frame[st] == cmds[i]) {
+                                if (BIT_SET(cmd_mask, i) && frame[st] == cmds[i]) {
                                         st = C_RCV;
                                         j = i;
                                 }
@@ -165,6 +177,10 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                 }
         }
 
+        connection_alive = (retries < MAX_RETRIES);
+        if (!connection_alive)
+                return -1;
+
         if (connector == TRANSMITTER) {
                 if (frame[2] == cmds[RR_1] || frame[2] == cmds[REJ_0])
                         sequence_number = 0x40;
@@ -172,23 +188,14 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                         sequence_number = 0x0;
         }
 
-        fprintf(stdout, "log: read frame with %s @ %s\n", cmds_str[j], 
-                (addr == TRANSMITTER) ? "TRANSMITTER" : "RECEIVER");
-        return -(retries >= MAX_RETRIES);
+        fprintf(stdout, "log: frame read with %s @ %s\n", cmds_str[j], 
+                            (addr == TRANSMITTER) ? "TRMT" : "RECV");
+        return 0;
 }
 
-
-static void
-install_sigalrm(void (*handler)(int))
-{
-        sigact.sa_handler = handler;
-        sigemptyset(&sigact.sa_mask);
-        sigact.sa_flags = 0;
-        sigaction(SIGALRM, &sigact, NULL);
-}
 
 void 
-transmitter_alrm_handler_open(int unused) 
+trmt_alrm_handler_open(int unused) 
 {
         alarm(TIMEOUT);
         retries++;
@@ -196,7 +203,7 @@ transmitter_alrm_handler_open(int unused)
 }
 
 static int 
-llopen_receiver(int fd)
+llopen_recv(int fd)
 {
         read_frame_US(fd, (1 << SET), TRANSMITTER);
         send_frame_US(fd, UA, RECEIVER);
@@ -205,18 +212,24 @@ llopen_receiver(int fd)
 }
 
 static int 
-llopen_transmitter(int fd)
+llopen_trmt(int fd)
 {
-        int rf;
-        install_sigalrm(transmitter_alrm_handler_open);
-        send_frame_US(fd, SET, TRANSMITTER);
+        int conn_est;
+        retries = 0;
 
+        install_sigalrm(trmt_alrm_handler_open);
+
+        send_frame_US(fd, SET, TRANSMITTER);
         alarm(TIMEOUT);
-        rf = read_frame_US(fd, (1 << UA), RECEIVER);
+        conn_est = read_frame_US(fd, (1 << UA), RECEIVER);
         alarm(0);
 
-        retries = 0;
-        return rf;
+        if (!connection_alive) {
+                fprintf(stderr, "err: can't establish a connection with RECV\n");
+                return -1;
+        }
+
+        return conn_est;
 }
 
 int 
@@ -227,11 +240,10 @@ llopen(int port, const uint8_t endpt)
         if (fd < 0)
                 return -1;
         
-        int open;
-        open = (endpt == TRANSMITTER) ? llopen_transmitter(fd) :
-                                        llopen_receiver(fd);
-        if (open < 0)
-                return -1;
+        int cnct;
+        cnct = (endpt == TRANSMITTER) ? llopen_trmt(fd) : llopen_recv(fd);
+        if (cnct < 0)
+                return cnct;
 
         connector = endpt;
         return fd;
@@ -251,12 +263,12 @@ encode_cpy(uint8_t *dest, ssize_t offset, uint8_t c) {
 static ssize_t
 encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
 {
-        int i;
+        ssize_t i, j;
         uint8_t bcc = src[0];
         for (i = 1; i < len; i++)
                 bcc ^= src[i];
 
-        uint32_t inc = 0;
+        ssize_t inc = 0;
         for (i = 0; i < len; i++)
                 inc += ESCAPED_BYTE(src[i]);
         
@@ -267,7 +279,6 @@ encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
                 return -1;
         }
 
-        int j;
         for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
                 encode_cpy(*dest, i, src[j]);
         encode_cpy(*dest, len + inc, bcc);
@@ -279,7 +290,7 @@ static ssize_t
 decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
 {
         ssize_t i, j;
-        uint16_t dec = 0;
+        ssize_t dec = 0;
         for (i = 0; i < len; i++)
                 dec += IS_ESCAPE(src[i]);
 
@@ -293,14 +304,14 @@ static ssize_t
 write_data(void)
 {
         ssize_t wb;
-        if ((wb = write(port_fd, buffer_frame, buffer_frame_size)) < 0)
+        if ((wb = write(port_fd, buffer_frame, buffer_frame_len)) < 0)
                 fprintf(stderr, "err: read() -> code: %d\n", errno);
 
         return wb;
 }
 
 void
-transmitter_alrm_handler_write() 
+trmt_alrm_handler_write(int unused) 
 {
         alarm(TIMEOUT);
         ++retries;
@@ -315,36 +326,40 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
                 fprintf(stderr, "err: encode_data() -> code: %ld\n", len);
                 return len;
         }
-        fprintf(stdout, "log: frame no. %d of length %ld ready to be sent\n", sequence_number >> 6, len);
 
         uint8_t frame[len+5];
+
         frame[0] = frame[len+4] = FLAG;
         frame[1] = TRANSMITTER;
         frame[2] = sequence_number;
         frame[3] = frame[1] ^ frame[2];
-
         memcpy(frame + 4, data, len);
+
         free(data);
 
-        memcpy(buffer_frame, frame, len + 5);
-        buffer_frame_size = len + 5;
-        retries = 0;
+        buffer_frame_len = sizeof(frame);
+        memcpy(buffer_frame, frame, buffer_frame_len);
 
         ssize_t wb;
         if ((wb = write_data()) < 0)
-                return -1;
+                return wb;
 
-        fprintf(stdout, "log: frame no. %d of length %ld sent -> wb: %ld\n", sequence_number >> 6, len, wb);
-        fprintf(stdout, "log: waiting on response from RECEIVER for frame no. %d\n", sequence_number >> 6);
+        fprintf(stdout, "log: send frame no. %d of %ld bytes\n", sequence_number >> 6, wb);
+        fprintf(stdout, "log: waiting on response from RECV for frame no. %d\n", sequence_number >> 6);
         
-        install_sigalrm(transmitter_alrm_handler_write);
-        alarm(TIMEOUT);
+        retries = 0;
+        install_sigalrm(trmt_alrm_handler_write);
 
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
-        read_frame_US(fd, mask, RECEIVER);
 
+        alarm(TIMEOUT);
+        read_frame_US(fd, mask, RECEIVER);
         alarm(0);
-        retries = 0;
+
+        if (!connection_alive) {
+                fprintf(stderr, "err: can't establish a connection with RECV\n");
+                return -1;
+        }
 
         return wb;
 }
@@ -356,7 +371,7 @@ llread(int fd, uint8_t *buffer)
         readState st = START;
         uint8_t frame[2*MAX_PACKET_SIZE+5];
         uint8_t disc = 0;
-        uint16_t c = 0;
+        ssize_t c = 0;
 
         while (st != STOP) {
                 if (read(fd, frame + st + c, 1) < 0) {
@@ -419,11 +434,12 @@ llread(int fd, uint8_t *buffer)
         ssize_t len;
         len = decode_data(buffer, frame + 4, c);
 
-        int i;
-        const uint8_t expect_bcc = buffer[len-1];
-        uint8_t bcc = buffer[0];
+        ssize_t i;
+        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
         for (i = 1; i < len - 1; i++)
                 bcc ^= buffer[i];
+
+        fprintf(stdout, "log: frame no. %d read with %ld bytes\n", sequence_number, len + 5);
 
         uint8_t cmd;
         cmd = sequence_number ? RR_1 : RR_0;
@@ -435,24 +451,30 @@ llread(int fd, uint8_t *buffer)
 }
 
 void 
-transmitter_alrm_handler_close(int unused) 
+trmt_alrm_handler_close(int unused) 
 {
         alarm(TIMEOUT);
         retries++;
-        send_frame_US(port_fd, DISC, RECEIVER);
+        send_frame_US(port_fd, DISC, TRANSMITTER);
 }
 
 int
 llclose(int fd)
 {
         if (connector == TRANSMITTER) {
-                install_sigalrm(transmitter_alrm_handler_close);
+                retries = 0;
+                install_sigalrm(trmt_alrm_handler_close);
             
                 send_frame_US(fd, DISC, TRANSMITTER);
 
                 alarm(TIMEOUT);
                 read_frame_US(fd, (1 << DISC), RECEIVER);
                 alarm(0);
+                
+                if (!connection_alive) {
+                        fprintf(stderr, "err: can't establish a connection with RECV\n");
+                        return -1;
+                }
 
                 send_frame_US(fd, UA, TRANSMITTER);
         }
