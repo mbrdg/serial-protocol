@@ -364,16 +364,15 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
         ssize_t wb;
         int rsnd;
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
-w_frame:
-        if ((wb = write_data()) < 0)
-                return wb;
 
-        alarm(TIMEOUT);
-        rsnd = read_frame_US(fd, mask, RECEIVER);
-        alarm(0);
+        do {
+                if ((wb = write_data()) < 0)
+                        return wb;
 
-        if (connection_alive && rsnd == RESEND_REQUIRED)
-                goto w_frame;
+                alarm(TIMEOUT);
+                rsnd = read_frame_US(fd, mask, RECEIVER);
+                alarm(0);
+        } while (connection_alive && rsnd == RESEND_REQUIRED);
 
         if (!connection_alive) {
                 fprintf(stderr, "err: can't establish a connection with RECV\n");
@@ -465,6 +464,7 @@ llread(int fd, uint8_t *buffer)
         if (bcc != expect_bcc)
                 cmd = sequence_number ? REJ_1 : REJ_0;
 
+        // sleep(4);
         send_frame_US(fd, cmd, RECEIVER);
         return (bcc == expect_bcc) ? len : -1;
 }
