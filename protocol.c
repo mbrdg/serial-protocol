@@ -20,6 +20,8 @@
 #define IS_FLAG(c) (c == FLAG)
 #define ESCAPED_BYTE(c) (IS_ESCAPE(c) || IS_FLAG(c))
 
+#define RESEND_REQUIRED 1
+
 #define BIT_SET(m, i) (m & (0x1 << i))
 
 /* commands */ 
@@ -42,6 +44,9 @@ static int connection_alive;
 
 static uint8_t buffer_frame[2*MAX_PACKET_SIZE+5];
 static ssize_t buffer_frame_len;
+
+/* forward declarations */
+static int check_resending(uint8_t cmd);
 
 /* util funcs */
 static void
@@ -125,7 +130,7 @@ send_frame_US(int fd, uint8_t cmd, uint8_t addr)
 }
 
 static int 
-read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
+read_frame_US(int fd, const uint8_t cmd_mask, const uint8_t addr)
 {
         readState st = START;
         uint8_t frame[5];
@@ -147,12 +152,10 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
                                 st = START;
                         break;
                 case A_RCV:
-                        for (i = 0; i < 7; i++) {
+                        for (i = 0; i < 7; i++)
                                 if (BIT_SET(cmd_mask, i) && frame[st] == cmds[i]) {
-                                        st = C_RCV;
-                                        j = i;
+                                        st = C_RCV; j = i;
                                 }
-                        }
 
                         if (st != C_RCV) {
                                 st = IS_FLAG(frame[st]) ? FLAG_RCV : START;
@@ -181,15 +184,13 @@ read_frame_US(int fd, uint8_t cmd_mask, uint8_t addr)
         if (!connection_alive)
                 return -1;
 
-        if (connector == TRANSMITTER) {
-                if (frame[2] == cmds[RR_1] || frame[2] == cmds[REJ_0])
-                        sequence_number = 0x40;
-                else if (frame[2] == cmds[RR_0] || frame[2] == cmds[REJ_1])
-                        sequence_number = 0x0;
-        }
-
         fprintf(stdout, "log: frame read with %s @ %s\n", cmds_str[j], 
                             (addr == TRANSMITTER) ? "TRMT" : "RECV");
+
+        uint8_t frame_I_ans = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
+        if (connector == TRANSMITTER && cmd_mask == frame_I_ans)
+                return check_resending(frame[2]);
+
         return 0;
 }
 
@@ -300,12 +301,17 @@ decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
         return len - dec;
 }
 
+
 static ssize_t
 write_data(void)
 {
         ssize_t wb;
-        if ((wb = write(port_fd, buffer_frame, buffer_frame_len)) < 0)
+        if ((wb = write(port_fd, buffer_frame, buffer_frame_len)) < 0) {
                 fprintf(stderr, "err: read() -> code: %d\n", errno);
+        } else {
+                fprintf(stdout, "log: send frame no. %d of %ld bytes\n", sequence_number >> 6, wb);
+                fprintf(stdout, "log: waiting on response from RECV for frame no. %d\n", sequence_number >> 6);
+        }
 
         return wb;
 }
@@ -318,10 +324,22 @@ trmt_alrm_handler_write(int unused)
         write_data();
 }
 
+static int 
+check_resending(const uint8_t cmd)
+{
+        if (cmd == cmds[RR_1] || cmd == cmds[REJ_0])
+                sequence_number = 0x40;
+        else 
+                sequence_number = 0x0;
+
+        return !(cmd == cmds[RR_0] || cmd == cmds[RR_1]);
+}
+
 ssize_t
 llwrite(int fd, uint8_t *buffer, ssize_t len)
 {
         uint8_t *data = NULL;
+
         if ((len = encode_data(&data, buffer, len)) < 0) {
                 fprintf(stderr, "err: encode_data() -> code: %ld\n", len);
                 return len;
@@ -340,21 +358,22 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
         buffer_frame_len = sizeof(frame);
         memcpy(buffer_frame, frame, buffer_frame_len);
 
-        ssize_t wb;
-        if ((wb = write_data()) < 0)
-                return wb;
-
-        fprintf(stdout, "log: send frame no. %d of %ld bytes\n", sequence_number >> 6, wb);
-        fprintf(stdout, "log: waiting on response from RECV for frame no. %d\n", sequence_number >> 6);
-        
         retries = 0;
         install_sigalrm(trmt_alrm_handler_write);
 
+        ssize_t wb;
+        int rsnd;
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
+w_frame:
+        if ((wb = write_data()) < 0)
+                return wb;
 
         alarm(TIMEOUT);
-        read_frame_US(fd, mask, RECEIVER);
+        rsnd = read_frame_US(fd, mask, RECEIVER);
         alarm(0);
+
+        if (connection_alive && rsnd == RESEND_REQUIRED)
+                goto w_frame;
 
         if (!connection_alive) {
                 fprintf(stderr, "err: can't establish a connection with RECV\n");
