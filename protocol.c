@@ -216,8 +216,8 @@ static int
 llopen_trmt(int fd)
 {
         int conn_est;
-        retries = 0;
 
+        retries = 0;
         install_sigalrm(trmt_alrm_handler_open);
 
         send_frame_US(fd, SET, TRANSMITTER);
