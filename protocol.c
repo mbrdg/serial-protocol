@@ -464,7 +464,7 @@ llread(int fd, uint8_t *buffer)
         if (bcc != expect_bcc)
                 cmd = sequence_number ? REJ_1 : REJ_0;
 
-        // sleep(4);
+        sleep(1);
         send_frame_US(fd, cmd, RECEIVER);
         return (bcc == expect_bcc) ? len : -1;
 }
