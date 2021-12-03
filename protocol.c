@@ -449,6 +449,8 @@ llread(int fd, uint8_t *buffer)
                 return -1;
         }
 
+        fprintf(stdout, "log: frame no. %d read with %ld bytes\n", sequence_number, c + 5);
+
         ssize_t len;
         len = decode_data(buffer, frame + 4, c);
 
@@ -456,8 +458,6 @@ llread(int fd, uint8_t *buffer)
         uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
         for (i = 1; i < len - 1; i++)
                 bcc ^= buffer[i];
-
-        fprintf(stdout, "log: frame no. %d read with %ld bytes\n", sequence_number, len + 5);
 
         uint8_t cmd;
         cmd = sequence_number ? RR_1 : RR_0;
