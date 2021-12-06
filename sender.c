@@ -11,11 +11,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "application.h"
 #include "protocol.h"
 #include "utils.h"
 
-typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
-typedef enum { SIZE, NAME } paramCmd;
 
 int
 main (int argc, char **argv)

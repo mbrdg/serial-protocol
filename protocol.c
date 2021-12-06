@@ -21,7 +21,7 @@
 #define BIT_SET(m, i) (m & (1 << i))
 
 /* commands */ 
-typedef enum { SET, DISC, UA, RR_0 , REJ_0, RR_1, REJ_1 } frameCmd;
+typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
 static const uint8_t cmds[7] = { 0x3, 0xB, 0x7, 0x5, 0x1, 0x85, 0x81 };
 
 #ifdef DEBUG

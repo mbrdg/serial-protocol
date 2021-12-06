@@ -9,10 +9,10 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "application.h"
 #include "protocol.h"
 #include "utils.h"
 
-typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
 
 int 
 main(int argc, char **argv)
