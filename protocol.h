@@ -17,6 +17,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "utils.h"
+
 #define RECEIVER 0x01
 #define TRANSMITTER 0x03
 

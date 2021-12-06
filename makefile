@@ -1,14 +1,17 @@
-CC=gcc
+CC=cc
 CFLAGS= -Wall -Werror -pedantic -g
 
-OBJ=protocol.c
+OPTIONS= -D BAUDRATE=B38400 -D TIMEOUT=3 -D MAX_RETRIES=3
+DEBUG= -D DEBUG
+
+OBJ=utils.c protocol.c
 
 all: sender receiver
 
 sender: $(OBJ) sender.c
-	$(CC) $(CFLAGS) $^ -o sndr
+	$(CC) $(CFLAGS) $(OPTIONS) $(DEBUG) $^ -o sndr
 receiver: $(OBJ) receiver.c
-	$(CC) $(CFLAGS) $^ -o recv
+	$(CC) $(CFLAGS) $(OPTIONS) $(DEBUG) $^ -o recv
 
 .PHONY: clean setup
 setup:

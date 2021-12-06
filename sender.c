@@ -1,18 +1,18 @@
 /*
  * sender.c
- * Non-Canonical Input Processing 
+ * Serial port protocol sender application
  * RC @ L.EIC 2122
- * Author: Miguel Rodrigues & Nuno Castro
+ * Authors: Miguel Rodrigues & Nuno Castro
  */
 
 #include <sys/stat.h>
 
-#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
 
 #include "protocol.h"
+#include "utils.h"
 
 typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
 typedef enum { SIZE, NAME } paramCmd;
@@ -28,64 +28,56 @@ main (int argc, char **argv)
 
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
-        if (fd_file < 0) {
-                fprintf(stderr, "err: open() -> code: %d\n", errno);
-                return -1;
-        }
+        passert(fd_file >= 0, "sender.c:31, open", -1);
 
         int fd;
         fd = llopen(atoi(argv[1]), TRANSMITTER);
-        if (fd < 0) {
-                fprintf(stderr, "err: llopen() -> aborting...\n");
-                return -1;
-        }
+        passert(fd >= 0, "sender.c:35, llopen", -1);
 
-        uint8_t fragment[MAX_PACKET_SIZE];
+        uint8_t frag[MAX_PACKET_SIZE];
 
         struct stat st;
         fstat(fd_file, &st);
         const off_t size_file = st.st_size;
 
-        fragment[0] = START;
-        fragment[1] = SIZE;
-        fragment[2] = sizeof(off_t);
-        memcpy(fragment + 3, &size_file, sizeof(off_t));
-        if (llwrite(fd, fragment, 3 + sizeof(off_t)) < 0)
-                goto llwrite_error;    
+        frag[0] = START;
+        frag[1] = SIZE;
+        frag[2] = sizeof(off_t);
+        memcpy(frag + 3, &size_file, sizeof(off_t));
+
+        int wb;
+        wb = llwrite(fd, frag, 3 + sizeof(off_t));
+        passert(wb >= 0, "sender.c:50, llwrite", -1);  
 
         uint16_t n;
         n = size_file / (MAX_PACKET_SIZE - 4);
-        if (size_file % (MAX_PACKET_SIZE - 4))
-                n++;
+        n += (size_file % (MAX_PACKET_SIZE - 4));
 
         ssize_t rb;
         int i;
         for (i = 0; i < n; i++) {
-                rb = read(fd_file, fragment + 4, MAX_PACKET_SIZE - 4);    
+                rb = read(fd_file, frag + 4, MAX_PACKET_SIZE - 4);    
 
-                fragment[0] = DATA;
-                fragment[1] = i % 255;
-                fragment[2] = rb / 256;
-                fragment[3] = rb % 256;
+                frag[0] = DATA;
+                frag[1] = i % 255;
+                frag[2] = rb / 256;
+                frag[3] = rb % 256;
 
-                if (llwrite(fd, fragment, rb + 4) < 0)
-                        goto llwrite_error;
+                wb = llwrite(fd, frag, rb + 4);
+                passert(wb >= 0, "sender.c:67, llwrite", -1);
         }
 
-        fragment[0] = STOP;
-        fragment[1] = SIZE;
-        fragment[2] = sizeof(off_t);
-        memcpy(fragment + 3, &size_file, sizeof(off_t));
-        if (llwrite(fd, fragment, 3 + sizeof(off_t)) < 0)
-                goto llwrite_error;
+        frag[0] = STOP;
+        frag[1] = SIZE;
+        frag[2] = sizeof(off_t);
+        memcpy(frag + 3, &size_file, sizeof(off_t));
+
+        wb = llwrite(fd, frag, 3 + sizeof(off_t));
+        passert(wb >= 0, "sender.c:76, llwrite", -1);
 
         llclose(fd);
         close(fd_file);
 
         return 0;
-
-llwrite_error:
-        fprintf(stderr, "err: llwrite() -> aborting...\n");
-        return -1;
 }
 
