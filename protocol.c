@@ -260,7 +260,8 @@ llopen(int port, const uint8_t endpt)
 
 
 static void
-encode_cpy(uint8_t *dest, ssize_t off, uint8_t c) {
+encode_cpy(uint8_t *dest, ssize_t off, uint8_t c) 
+{
         dest[off] = c;
     
         if (ESCAPED_BYTE(c)) {
@@ -283,7 +284,7 @@ encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
         
         ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
         *dest = (uint8_t *)malloc(nlen);
-        passert(dest != NULL, "protocol.c:281, malloc", -1);
+        passert(dest != NULL, "protocol.c:287, malloc", -1);
 
         for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
                 encode_cpy(*dest, i, src[j]);

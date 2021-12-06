@@ -1,5 +1,5 @@
 /*
- * receiver.c
+ * application.h
  * Serial port application protocol
  * RC @ L.EIC 2122
  * Authors: Miguel Rodrigues & Nuno Castro
