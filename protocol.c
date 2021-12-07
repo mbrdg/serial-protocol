@@ -22,7 +22,7 @@
 
 /* commands */ 
 typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
-static const uint8_t cmds[7] = { 0x3, 0xB, 0x7, 0x5, 0x1, 0x85, 0x81 };
+static const uint8_t cmds[7] = { 0x3, 0xb, 0x7, 0x5, 0x1, 0x85, 0x81 };
 
 #ifdef DEBUG
 static const char cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
@@ -115,7 +115,6 @@ send_frame_us(int fd, uint8_t cmd, uint8_t addr)
 
         if (write(fd, frame, sizeof(frame)) < 0)
                 return -1;
-
 #ifdef DEBUG
         char fsent[40];
         if (addr == TRANSMITTER)
@@ -184,7 +183,6 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
         connection_alive = retries < MAX_RETRIES;
         if (!connection_alive)
                 return -1;
-
 #ifdef DEBUG
         char fread[40];
         if (addr == RECEIVER)
@@ -194,7 +192,6 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
 
         plog(fread);
 #endif
-
         uint8_t frame_i_ans = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
         if (connector == TRANSMITTER && cmd_mask == frame_i_ans)
                 return check_resending(frame[2]);
@@ -206,7 +203,7 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
 void 
 trmt_alrm_handler_open(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         retries++;
         send_frame_us(port_fd, SET, TRANSMITTER);
 }
@@ -229,7 +226,7 @@ llopen_trmt(int fd)
         install_sigalrm(trmt_alrm_handler_open);
 
         send_frame_us(fd, SET, TRANSMITTER);
-        alarm(TIMEOUT);
+        alarm(TOUT);
         conn_est = read_frame_us(fd, 1 << UA, RECEIVER);
         alarm(0);
 
@@ -284,7 +281,7 @@ encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
         
         ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
         *dest = (uint8_t *)malloc(nlen);
-        passert(dest != NULL, "protocol.c:287, malloc", -1);
+        passert(dest != NULL, "protocol.c:284, malloc", -1);
 
         for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
                 encode_cpy(*dest, i, src[j]);
@@ -313,23 +310,21 @@ write_data(void)
 {
         ssize_t wb;
         wb = write(port_fd, buffer_frame, buffer_frame_len);
-
 #ifdef DEBUG
         char finfo[50];
 
-        snprintf(finfo, 50, "send frame no. %d of %ld bytes", sequence_number, wb);
+        snprintf(finfo, 50, "sent frame no. %d of %ld bytes", sequence_number, wb);
         plog(finfo);
         snprintf(finfo, 50, "waiting on response from RECEIVER for frame no. %d", sequence_number);
         plog(finfo);
 #endif
-
         return wb;
 }
 
 void
 trmt_alrm_handler_write(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         ++retries;
         write_data();
 }
@@ -375,7 +370,7 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
                 if (wb < 0)
                         return wb;
 
-                alarm(TIMEOUT);
+                alarm(TOUT);
                 rsnd = read_frame_us(fd, mask, RECEIVER);
                 alarm(0);
         } while (connection_alive && rsnd == RESEND);
@@ -460,7 +455,6 @@ llread(int fd, uint8_t *buffer)
         snprintf(fread, 40, "frame no. %d read with %ld bytes", sequence_number, c + 5);
         plog(fread);
 #endif
-
         ssize_t len;
         len = decode_data(buffer, frame + 4, c);
 
@@ -468,7 +462,10 @@ llread(int fd, uint8_t *buffer)
         uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
         for (i = 1; i < len - 1; i++)
                 bcc ^= buffer[i];
-
+#ifdef DEBUG
+        bcc ^= (rand() % 100 <= FER) ? 0xff : 0x0; /* artificial error on bcc */
+        sleep(TPROP); /* artificial propagation time */ 
+#endif  
         uint8_t cmd;
         cmd = sequence_number ? RR_1 : RR_0;
         if (bcc != expect_bcc)
@@ -481,7 +478,7 @@ llread(int fd, uint8_t *buffer)
 void 
 trmt_alrm_handler_close(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         retries++;
         send_frame_us(port_fd, DISC, TRANSMITTER);
 }
@@ -495,7 +492,7 @@ llclose(int fd)
             
                 send_frame_us(fd, DISC, TRANSMITTER);
 
-                alarm(TIMEOUT);
+                alarm(TOUT);
                 read_frame_us(fd, 1 << DISC, RECEIVER);
                 alarm(0);
                 

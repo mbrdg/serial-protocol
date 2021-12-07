@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "application.h"
@@ -19,12 +20,15 @@
 int
 main (int argc, char **argv)
 {
-        if (argc < 3)
-        {
+        if (argc < 3) {
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-
+#ifdef DEBUG
+        if (TPROP >= TOUT)
+                perr("[tprop >= tout] might lead to undefined behaviour");
+        srand(time(0));
+#endif
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
         passert(fd_file >= 0, "sender.c:30, open", -1);
