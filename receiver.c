@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "application.h"
@@ -21,7 +22,9 @@ main(int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-
+#ifdef DEBUG
+        srand(time(0)); /* nedeed to make random errors */
+#endif
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
         passert(fd_file >= 0, "receiver.c :: open", -1);
@@ -50,7 +53,7 @@ main(int argc, char **argv)
                 case START:
                         break;
                 case STOP:
-                        llread(fd, frag);   /* Take the last disc frame */
+                        llread(fd, frag); /* Take the last disc frame */
                         goto finish;
                 default:
                         break;
