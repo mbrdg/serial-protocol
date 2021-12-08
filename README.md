@@ -4,19 +4,19 @@
 \newpage
 
 ## Sumário
-Este projeto foi desenvolvido no âmbito da unidade curricular de Redes de Computadores e visa a implemetação de um protocolo de ligação de dados e testar este mesmo com uma aplicação de transferência de ficheiros.
+Este projeto foi desenvolvido no âmbito da unidade curricular de Redes de Computadores e visa a implemetação de um protocolo de ligação de dados e testando-o com uma aplicação de transferência de ficheiros.
 
 ## 1. Introdução
-Existem inúmeras motivações para que existem mecanismo de transferência de dados entre computadores diferentes, como por exemplo para comunicar à distância. Além disso, é fundamental que essa transferência de dados decorra sem qualquer tipo de erros e de uma forma confiável - esta é, indubtivelmente, a principal motivação para a realização deste pequeno projeto. 
+Existem inúmeras motivações para que existam mecanismos de transferência de dados entre computadores diferentes, por exemplo, para comunicar à distância. Além disso, é fundamental que essa transferência de dados decorra sem qualquer tipo de erros e de uma forma confiável - esta é, indubitavelmente, a principal motivação para a realização deste pequeno projeto. 
 
 Neste primeiro trabalho prático foi-nos proposto a implementação de um protocolo para a troca de dados entre 2 computadores ligados por uma porta série. As principais tecnologias utilizadas foram a linguagem C, a porta série RS-232 e ainda a *API* programática do *Linux*.
 
 ## 2. Arquitetura e Estrutura de código
 A impelmentação do protocolo pode ser dividido em diferentes unidades lógicas cada uma independente entre si. Deste modo, temos um protocolo para a aplicação onde uma das partes, isto é o emissor comunica com o recetor usando uma interface que oferece uma abstração à camada de ligação de dados entre os dois programas.
 
-Como foi expresso no parágrafo anterior, o código encontra-se divido de modo a proporcionar diferentes camadas de abstração, isto significa que as diferentes unidades lógicas são independentes entre si. No nosso caso, essa independência é garantida com recurso à disposição do código em diferentes ficheiros - sobretudo de *header files*, mas também com o uso da *keyword* `static` nas declarações das funções que são internas a uma determinada unidade lógica, para que só aí possam ser utilizadas e, simultaneamente estar escondidas do restante código.
+Como foi expresso no parágrafo anterior, o código encontra-se divido de modo a proporcionar diferentes camadas de abstração, isto significa que as diferentes unidades lógicas são independentes entre si. No nosso caso, essa independência é garantida com recurso à disposição do código em diferentes ficheiros - sobretudo de *header files*, mas também com o uso da *keyword* `static` nas declarações das funções que são internas a uma determinada unidade lógica, para que só aí possam ser utilizadas e, simultaneamente, estar escondidas do restante código.
 
-No que toca à estrutura dos ficheiros esta é muito simples. Os ficheiros `protocol.h` e `protocol.c` representam a camada de ligação de dados, depois os ficheiros `sender.c` e `receiver.c` representam a camada da aplicação e, finalmente, os ficheiros `utils.h` e `utils.c` que contêm as definições de outras funções utilitárias.
+No que concerne à estrutura dos ficheiros, esta é muito simples. Os ficheiros `protocol.h` e `protocol.c` representam a camada de ligação de dados, depois os ficheiros `sender.c` e `receiver.c` representam a camada da aplicação e, finalmente, os ficheiros `utils.h` e `utils.c` que contêm as definições das funções utilitárias.
 
 Para utilizar os 2 programas basta executar um dos seguintes comandos, de acordo com o fluxo de transmissão, em cada um dos dispositivos:
 
@@ -34,13 +34,13 @@ $ sndr <num. da porta> <nome do ficheiro a enviar>
 De acordo com o enunciado proposto, devem ser implementadas 4 funções que formam uma *API* a ser usada pelas aplicações, quer do emissor, quer do recetor. Eis os cabeçalhos dessa *API*:
 
 ```c 
-int llopen(int port, const uint8_t endpt);
+int llopen(int port, const uint8_t addr);
 ssize_t llwrite(int fd, uint8_t *buffer, ssize_t len);
 ssize_t llread(int fd, uint8_t *buffer);
 int llclose(int fd);
 ```
 
-### 3.1 `int llopen(int port, const uint8_t endpt)` { #llopen }
+### 3.1 `int llopen(int port, const uint8_t addr)` { #llopen }
 Abre o canal de comunicações fornecendo o respetivo identificador. A aplicação deve fornecer o número associado à porta série e ainda um valor de modo a identificar de que "lado" da ligação se encontra. Os valores possíveis são `REVEIVER` e `TRANSMITTER` e estão definidos no ficheiro `protocol.h`:
 
 ```c
@@ -72,26 +72,105 @@ O protocolo permite que se configurem algumas opções (em tempo de compilação
 ### 3.6 Detalhes de implementação
 Na implementação do protocolo da ligação de dados os principais desafios foram as implementações dos mecanismos de transparência e deteção de erros nos dados transmitidos e do mecanismo de leitura de dados, sobretudo por causa da panóplia de nuances a ter em conta.
 
-O fluxo de execução é bastante simples, sendo que na nossa implementação é o emissor que toma a iniciativa. Deste modo, o emissor começa por enviar o comando `SET` ficando logo de seguida à espera de uma resposta do recetor. Já do lado do recetor este aguarda pelo envio da trama `SET` e envia a resposta - `UA`. 
+O fluxo de execução é bastante simples, com a característica de que na nossa implementação é o emissor quem toma a iniciativa. Deste modo, o emissor começa por enviar o comando `SET` ficando logo de seguida à espera de uma resposta do recetor. Já do lado do recetor, o programa aguarda pela receção da trama `SET` e envia a resposta - uma trama do tipo `UA`.
 
-O envio das tramas de supervisão é feito pela função `send_frame_us` onde `fd` descreve o indentificador do canal de comunicações, `cmd` o valor a ser enviado no campo de comando e `addr` que descreve quem envia a trama. Os valores possíveis para `addr` são os mesmos para o argumento `endpt` da função [`llopen`](#llopen); do mesmo modo para a `cmd` os valores possíveis são:
+O envio das tramas de supervisão é feito pela função `send_frame_us(int fd, uint8_t cmd, uint8_t addr)` onde `fd` descreve o indentificador do canal de comunicações, `cmd` o valor a ser enviado no campo de comando e `addr` que descreve quem envia a trama. Os valores possíveis para `addr` são os mesmos que os da função [`llopen`](#llopen). Nos mesmo moldes, para a `cmd` os valores possíveis são:
 
 ```c 
 typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
 ```
 
-Por outro lado, a receção das tramas de supervisão (e de informação) é digerida na função `read_frame_us`. Esta função é mais complexa que a anterior, na medida em que existe uma máquina de estados para intrepertar cada *byte* de informação lido. Aqui, os parâmetros, apesar de terem nomes semelhantes, tomam uma intrepertação ligeiramente diferente. Assim, `fd` é o identificador do canal de comunicações, `cmd_mask` é uma máscara de *bits* para permitir que com a mesma função seja possível ler um valor de um conjunto valores que possam ocorrer - isto prova-se útil quando existem múltiplas possibilidades de resposta ao envio de uma trama de informação - por último, o valor `addr` representa o valor do lado que enviou a trama a ser lida.
+A construção das tramas de supervisão fica clara com o seguinte excerto de código:
+
+```c
+unsigned char frame[5];
+frame[0] = frame[4] = FLAG;
+frame[1] = addr;
+frame[2] = cmds[cmd];
+frame[3] = frame[1] ^ frame[2];
+```
+
+Por outro lado, a receção das tramas de supervisão (e de informação) é digerida na função `read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)`. Esta função é mais complexa que a anterior, na medida em que existe uma máquina de estados para intrepertar cada *byte* de informação lido - isto acontece porque há a necessidade de se ler os dados que chegam *byte* a *byte*. Aqui, os parâmetros, apesar de terem nomes semelhantes, tomam uma intrepertação ligeiramente diferente. Assim, `fd` é o identificador do canal de comunicações, `cmd_mask` é uma máscara de *bits* para permitir que com a mesma função seja possível ler um valor dentro um conjunto valores que possam ocorrer - isto prova-se útil quando existem múltiplas possibilidades de resposta ao envio de uma trama de informação - por último, o valor `addr` representa o valor do lado que enviou a trama.
 
 Depois, o envio e a codificação das tramas de informação é feito pelas funções `write_data` e `encode_data` chamadas por [`llwrite`](#llwrite). No outro lado da comunicação, em [`llread`](#llread), temos a leitura que é intrepertada com recurso a máquina de estado - muito semelhante à presente em `send_frame_us` - e a descodificação que é da responsabilidade da função `decode_data` No fim, após o envio de todos os dados, a conexão é terminada com a chamada a [`llclose`](#llclose).
 
-## 4. Protocolo de aplicação
-Como vimos na secção anterior, o protocolo da ligação de dados carateriza-se por estar mais em baixo no modelo *OSI* do que o protocolo da aplicação. Este protocolo é mais simples e recorre à *API* descrita em cima para transferir dados. 
+Alguns excertos de código relevantes são os seguintes:
 
-No nosso caso implementamos 2 aplicações que representam o recetor e o transmissor dos dados. Em ambos os programas a primeira ação a ser efetuada é a abertura do canal de comunicações com a chamada a [`llopen`](#llopen). Depois, ocorre uma divergência na lógica dos 2 programas. Comecemos pelo emissor, que envia um primeiro pacote de controlo com o valor `START` no campo de controlo e o tamanho do ficheiro, depois lê pequenos fragmentos do ficheirofornecido como argumento e envia os respetivos pacotes de dados finalizando com um pacote de controlo semelhante ao primeiro exceto no campo de controlo onde o valor é `STOP`. Este envio dos dados acontece com recurso a chamadas a [`llwrite`](#llwrite). Enquanto isso, do outro lado, o recetor vai lendo os pacotes de controlo e de informação e escrevendo-os no ficheiro fornecido como argumento do programa. Findo todo o processo de transmissão ambos os programas programas chamam a função [`llclose`](#llclose), libertam os recursos que tomaram previamente do sistema e terminam a sua execução.
+* As funções `encode_data` e `decode_data` que implementam o mecanismo de transparência de dados, muito importante, na medida em que permite que valores com significado especial possam ocorrer ao longo da informação trasmitida.
+```c 
+static ssize_t
+encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
+{
+        ssize_t i, j;
+        uint8_t bcc = src[0];
+        for (i = 1; i < len; i++)
+                bcc ^= src[i];
+
+        ssize_t inc = 0;
+        for (i = 0; i < len; i++)
+                inc += ESCAPED_BYTE(src[i]);
+
+        ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
+        *dest = (uint8_t *)malloc(nlen);
+        passert(dest != NULL, "protocol.c :: malloc", -1);
+
+        for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
+                encode_cpy(*dest, i, src[j]);
+        encode_cpy(*dest, len + inc, bcc);
+
+        return nlen;
+}
+
+static ssize_t
+decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
+{
+        ssize_t i, j;
+        ssize_t dec = 0;
+        for (i = 0; i < len; i++)
+                dec += IS_ESCAPE(src[i]);
+
+        for (i = 0, j = 0; j < len - dec; i++, j++)
+            dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ KEY) : src[i];
+
+        return len - dec;
+}
+```
+
+* A função `recv_send_response` que averigua se o campo de proteção de dados está correto e que envia a resposta mais adequada ao emissor. Esta função é chamada por [`llread`](#llread).
+```c
+static int
+recv_send_response(int fd, const uint8_t *buffer, const ssize_t len)
+{
+        ssize_t i;
+        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
+        for (i = 1; i < len - 1; i++)
+                bcc ^= buffer[i];
+
+        uint8_t cmd;
+        cmd = sequence_number ? RR_1 : RR_0;
+        if (bcc != expect_bcc)
+                cmd = sequence_number ? REJ_1 : REJ_0;
+
+        send_frame_us(fd, cmd, RECEIVER);
+        return (bcc == expect_bcc) ? len : -1;
+}
+```
+
+## 4. Protocolo de aplicação
+Como vimos na secção anterior, o protocolo da ligação de dados carateriza-se por estar mais a baixo no modelo *OSI* do que o protocolo da aplicação. Este protocolo é mais simples e recorre à *API* descrita em cima para transferir dados. 
+
+No nosso caso implementamos 2 aplicações que representam o recetor e o transmissor dos dados. Em ambos os programas a primeira ação a ser efetuada é a abertura do canal de comunicações com a chamada a [`llopen`](#llopen). Depois, ocorre uma divergência na lógica dos 2 programas. Comecemos pelo emissor, que envia um primeiro pacote de controlo com o valor `START` no campo de controlo e o tamanho do ficheiro, depois lê pequenos fragmentos do ficheirofornecido como argumento e envia os respetivos pacotes de dados finalizando com um pacote de controlo semelhante ao primeiro exceto no campo de controlo onde o valor é `STOP`. Este envio dos dados acontece com recurso a chamadas a [`llwrite`](#llwrite). Enquanto isso, do outro lado, o recetor vai lendo os pacotes de controlo e de informação e escrevendo-os no ficheiro fornecido como argumento do programa. Findo todo o processo de transmissão ambos os programas programas chamam a função [`llclose`](#llclose), libertam os recursos sobre a sua alçada e cessam a sua execução.
 
 ## 5. Validação 
 
-Para a validação do protocolo impelmentado foram executados vários testes e depois verificadas as *checksums* dos ficheiros para garantir que todos os componentes do protocolo, sobretudo os mecanismos de deteção de erros, de retransmissão e de transparência funcionavam corretamente. Eis o *output* da execução de um dos teste realizados:
+Para a validação do protocolo impelmentado foram executados vários testes e depois verificadas as *checksums* dos ficheiros para garantir que todos os componentes do protocolo, sobretudo os mecanismos de deteção de erros, de retransmissão e de transparência funcionavam corretamente. O tipo de testes realizados foram:
+
+* Execução com ficheiros diferentes;
+* Execução "normal" com e sem introdução de erros;
+* Começo da execução tardio no lado do recetor;
+* Execução com interrupções na porta série.
+
+O *output* da execução dos teste realizados foi o seguinte:
 
 ```sh 
 $ recv 11 pingu.gif
@@ -105,18 +184,18 @@ $ sha256sum pinguim.gif pingu.gif
 54da34fa5529f96c60aead3681e5ed2a53b98ce4281e62702ca2f39530c07365  pingu.gif
 ```
 
-Para todos os testes realizados, as *checksums* foram, para todos eles, exatamente iguais, portanto o ficheiro enviado e o ficheiro recebido são exatamente iguais - o resultado pretendido. Ou seja, o protocolo é capaz de ultrapassar erros que possam ocorrer em qualquer um dos lados do eixo de comunicações.
+As *checksums* foram, para todos os testes realizados, exatamente iguais, portanto o ficheiro enviado e o ficheiro recebido são exatamente iguais - o resultado pretendido. Ou seja, o protocolo é capaz de ultrapassar erros que possam ocorrer em qualquer um dos lados do eixo de comunicações. 
 
 ## 6. Eficiência de protocolo de ligação
 
-A eficiência de um protocolo é a razão de tempo gasto entre o envio ou leitura de dados e o tempo gasto entre a espera pelas confirmações.
+Segundo a definição, a eficiência de um protocolo é a razão de tempo gasto entre o envio ou leitura de dados e o tempo gasto entre a espera pelas confirmações.
 
 ### 6.1 Aspetos de implemetação relativas a *ARQ* (*Automatic Repeate reQuest*)
 
 O protcolo implementado carateriza-se pelo facto de ter a funcionalidade *ARQ*, neste caso em particular estamos perante um caso especial de *Go back N* onde $$ N=1 $$ 
-Isto é, *Stop & Wait* - o emissor não deve avançar sem antes aguardar por uma resposta do recetor, seja ela uma resposta positiva ou uma rejeição devido a erros. Além disso, para *Go Back N* existe a necessidade de haver um número de sequência, como acontece na nossa implementação com a variável `sequence_number` definida no ficheiro `protocol.c`, e que permita ordenar as tramas de acordo com a ordem pretendida. Para *Stop & Wait* essa variável apenas precisa de alternar entre `0` e `1`.
+Isto é, *Stop & Wait* - o emissor não deve avançar sem antes aguardar por uma resposta do recetor, seja ela uma resposta positiva ou uma rejeição devido a erros. Além disso, para *Go Back N* existe a necessidade de haver um número de sequência, como acontece na nossa implementação com a variável `sequence_number` definida no ficheiro `protocol.c`, e que permita ordenar as tramas de acordo com a ordem pretendida. Para *Stop & Wait* essa variável apenas precisa de alternar entre `0` e `1`, visto que ocorre sempre a retransmissão para uma trama que ainda não tenha sido aceite.
 
-Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que este faça frente à eficiência de outros mecanismos, como é o caso do *selective repeat* - onde o envio de dados prossegue mesmo em caso de erro (esses erros são corrigidos alguns envios depois). 
+Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que este faça frente à eficiência de outros mecanismos, como é o caso do *selective repeat* - onde o envio de dados prossegue mesmo em caso de erro (erros que são corrigidos alguns envios depois). 
 
 ### 6.2 Caraterização estatística da eficiência do protocolo { #estatisticas }
 
@@ -366,7 +445,7 @@ finish:
  * @param int[out] - file descriptor corresponding to the opened file 
  */
 int
-llopen(int port, const uint8_t endpt);
+llopen(int port, const uint8_t addr);
 
 /***
  * Writes a given chunck of information in the file pointed by the first param
@@ -508,7 +587,7 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_us(int fd, uint8_t cmd, uint8_t addr) 
+send_frame_us(int fd, const uint8_t cmd, const uint8_t addr) 
 {        
         unsigned char frame[5];
 
@@ -638,7 +717,7 @@ llopen_trmt(int fd)
 }
 
 int 
-llopen(int port, const uint8_t endpt)
+llopen(int port, const uint8_t addr)
 {
         int fd;
         fd = term_conf_init(port);
@@ -646,11 +725,11 @@ llopen(int port, const uint8_t endpt)
                 return -1;
         
         int cnct;
-        cnct = (endpt == TRANSMITTER) ? llopen_trmt(fd) : llopen_recv(fd);
+        cnct = (addr == TRANSMITTER) ? llopen_trmt(fd) : llopen_recv(fd);
         if (cnct < 0)
                 return cnct;
 
-        connector = endpt;
+        connector = addr;
         return fd;
 }
 
