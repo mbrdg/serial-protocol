@@ -105,7 +105,7 @@ term_conf_end(int fd)
 
 
 static int
-send_frame_us(int fd, uint8_t cmd, uint8_t addr) 
+send_frame_us(int fd, const uint8_t cmd, const uint8_t addr)
 {        
         unsigned char frame[5];
 
@@ -235,7 +235,7 @@ llopen_trmt(int fd)
 }
 
 int 
-llopen(int port, const uint8_t endpt)
+llopen(int port, const uint8_t addr)
 {
         int fd;
         fd = term_conf_init(port);
@@ -243,11 +243,11 @@ llopen(int port, const uint8_t endpt)
                 return -1;
         
         int cnct;
-        cnct = (endpt == TRANSMITTER) ? llopen_trmt(fd) : llopen_recv(fd);
+        cnct = (addr == TRANSMITTER) ? llopen_trmt(fd) : llopen_recv(fd);
         if (cnct < 0)
                 return cnct;
 
-        connector = endpt;
+        connector = addr;
         return fd;
 }
 
