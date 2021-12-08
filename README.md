@@ -235,7 +235,7 @@ Agora, em retrospetiva, verificamos que com este pequeno projeto foi possível c
 ### `application.h`
 
 ```{.c .numberLines}
-*
+/*
  * application.h
  * Serial port application protocol
  * RC @ L.EIC 2122
@@ -817,7 +817,6 @@ ssize_t
 llwrite(int fd, uint8_t *buffer, ssize_t len)
 {
         uint8_t *data = NULL;
-
         len = encode_data(&data, buffer, len);
         if (len < 0)
                 return len;

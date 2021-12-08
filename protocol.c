@@ -25,8 +25,7 @@ typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
 static const uint8_t cmds[7] = { 0x3, 0xb, 0x7, 0x5, 0x1, 0x85, 0x81 };
 
 #ifdef DEBUG
-static const char 
-cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
+static const char cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
 #endif
 
 /* reading */
@@ -335,7 +334,6 @@ ssize_t
 llwrite(int fd, uint8_t *buffer, ssize_t len)
 {
         uint8_t *data = NULL;
-
         len = encode_data(&data, buffer, len);
         if (len < 0)
                 return len;
