@@ -12,9 +12,9 @@ Existem inúmeras motivações para que existem mecanismo de transferência de d
 Neste primeiro trabalho prático foi-nos proposto a implementação de um protocolo para a troca de dados entre 2 computadores ligados por uma porta série. As principais tecnologias utilizadas foram a linguagem C, a porta série RS-232 e ainda a *API* programática do *Linux*.
 
 ## 2. Arquitetura e Estrutura de código
-A impelmentação do protocolo pode ser dividido em diferentes unidades lógicas cada uma independente entre si. Deste modo, temos um protocolo para a aplicação onde uma das partes, i.e. o emissor comunica com o recetor usando para tal uma interface que oferece uma abstração à camada de ligação de dados entre os dois atores.
+A impelmentação do protocolo pode ser dividido em diferentes unidades lógicas cada uma independente entre si. Deste modo, temos um protocolo para a aplicação onde uma das partes, isto é o emissor comunica com o recetor usando uma interface que oferece uma abstração à camada de ligação de dados entre os dois programas.
 
-Como foi expresso no parágrafo anterior, o código encontra-se divido de modo a proporcionar diferentes camadas de abstração, isto significa que as diferentes unidades lógicas são independentes entre si. No nosso caso, essa independência é garantida com recurso à disposição do código em diferentes ficheiros - sobretudo de *header files*, mas também com o uso da *keyword* `static` que confina uma determinada declaração somente a uma unidade lógica.
+Como foi expresso no parágrafo anterior, o código encontra-se divido de modo a proporcionar diferentes camadas de abstração, isto significa que as diferentes unidades lógicas são independentes entre si. No nosso caso, essa independência é garantida com recurso à disposição do código em diferentes ficheiros - sobretudo de *header files*, mas também com o uso da *keyword* `static` nas declarações das funções que são internas a uma determinada unidade lógica, para que só aí possam ser utilizadas e, simultaneamente estar escondidas do restante código.
 
 No que toca à estrutura dos ficheiros esta é muito simples. Os ficheiros `protocol.h` e `protocol.c` representam a camada de ligação de dados, depois os ficheiros `sender.c` e `receiver.c` representam a camada da aplicação e, finalmente, os ficheiros `utils.h` e `utils.c` que contêm as definições de outras funções utilitárias.
 
@@ -62,9 +62,10 @@ O protocolo permite que se configurem algumas opções (em tempo de compilação
 
 | Opção | Descrição |
 | --- | ----------- |
-| `BAUDRATE` | Número de símbolo que fluem no canal de comunicações por segundo |
-| `TIMEOUT` | Número de segundos de espera sem resposta do recetor até se desencadear uma retransmissão |
-| `MAX_RETRIES` | Número máximo de tentativas de retransmissões até que o emissor desista de retransmitir |
+| `BAUDRATE` | Número de símbolo que fluem no canal de comunicações por segundo. |
+| `TOUT` | Número de segundos de espera, no emissor, sem uma resposta do recetor até se desencadear uma retransmissão. |
+| `TPROP` | Número de segundos de espera no recetor de modo a simular um atraso no [tempo de propagação](#estatisticas) de uma trama. |
+| `MAX_RETRIES` | Número máximo de tentativas de retransmissão até que o emissor desista de retransmitir. |
 | `MAX_PACKET_SIZE` | Tamanho máximo, em *bytes*, para os pacotes da aplicação |
 : Opções de compilação disponíveis no ficheiro `makefile`.
 
@@ -73,13 +74,13 @@ Na implementação do protocolo da ligação de dados os principais desafios for
 
 O fluxo de execução é bastante simples, sendo que na nossa implementação é o emissor que toma a iniciativa. Deste modo, o emissor começa por enviar o comando `SET` ficando logo de seguida à espera de uma resposta do recetor. Já do lado do recetor este aguarda pelo envio da trama `SET` e envia a resposta - `UA`. 
 
-O envio das tramas de supervisão é feito pela função `int send_frame_us(int fd, uint8_t cmd, uint8_t addr)` onde `fd` descreve o indentificador do canal de comunicações, `cmd` o valor a ser enviado no campo de comando e `addr` que descreve quem envia a trama. Os valores possíveis para `addr` são os mesmos para o argumento `endpt` da função [`llopen`](#llopen); do mesmo modo para a `cmd` os valores possíveis são:
+O envio das tramas de supervisão é feito pela função `send_frame_us` onde `fd` descreve o indentificador do canal de comunicações, `cmd` o valor a ser enviado no campo de comando e `addr` que descreve quem envia a trama. Os valores possíveis para `addr` são os mesmos para o argumento `endpt` da função [`llopen`](#llopen); do mesmo modo para a `cmd` os valores possíveis são:
 
 ```c 
 typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
 ```
 
-Por outro lado, a receção das tramas de supervisão (e de informação) é digerida na função `int read_frame_us(int fd, uint8_t cmd_mask, uint8_t addr)`. Esta função é mais complexa que a anterior, na medida em que existe uma máquina de estados para intrepertar cada *byte* de informação lido. Aqui, os parâmetros, apesar de terem nomes semelhantes, tomam uma intrepertação ligeiramente diferente. Assim, `fd` é o identificador do canal de comunicações, `cmd_mask` é uma máscara de *bits* para permitir que com a mesma função seja possível ler um valor de um conjunto valores que possam ocorrer - isto prova-se útil quando existem múltiplas possibilidades de resposta ao envio de uma trama de informação - por último, o valor `addr` representa o valor do lado que enviou a trama a ser lida.
+Por outro lado, a receção das tramas de supervisão (e de informação) é digerida na função `read_frame_us`. Esta função é mais complexa que a anterior, na medida em que existe uma máquina de estados para intrepertar cada *byte* de informação lido. Aqui, os parâmetros, apesar de terem nomes semelhantes, tomam uma intrepertação ligeiramente diferente. Assim, `fd` é o identificador do canal de comunicações, `cmd_mask` é uma máscara de *bits* para permitir que com a mesma função seja possível ler um valor de um conjunto valores que possam ocorrer - isto prova-se útil quando existem múltiplas possibilidades de resposta ao envio de uma trama de informação - por último, o valor `addr` representa o valor do lado que enviou a trama a ser lida.
 
 Depois, o envio e a codificação das tramas de informação é feito pelas funções `write_data` e `encode_data` chamadas por [`llwrite`](#llwrite). No outro lado da comunicação, em [`llread`](#llread), temos a leitura que é intrepertada com recurso a máquina de estado - muito semelhante à presente em `send_frame_us` - e a descodificação que é da responsabilidade da função `decode_data` No fim, após o envio de todos os dados, a conexão é terminada com a chamada a [`llclose`](#llclose).
 
@@ -90,52 +91,62 @@ No nosso caso implementamos 2 aplicações que representam o recetor e o transmi
 
 ## 5. Validação 
 
-Para a validação do protocolo impelmentado foram executados vários testes e depois verificadas as *checksums* dos ficheiros para garantir que todos os componentes do protocolo, sobretudo mecanismos de deteção de erros, de retransmissão e de transparência funcionavam corretamente. Eis o *output* da execução de um dos teste realizados:
+Para a validação do protocolo impelmentado foram executados vários testes e depois verificadas as *checksums* dos ficheiros para garantir que todos os componentes do protocolo, sobretudo os mecanismos de deteção de erros, de retransmissão e de transparência funcionavam corretamente. Eis o *output* da execução de um dos teste realizados:
 
 ```sh 
 $ recv 11 pingu.gif
 ```
-
 ```sh 
 $ sndr 10 pinguim.gif
 ```
-
 ```sh 
 $ sha256sum pinguim.gif pingu.gif
 54da34fa5529f96c60aead3681e5ed2a53b98ce4281e62702ca2f39530c07365  pinguim.gif
 54da34fa5529f96c60aead3681e5ed2a53b98ce4281e62702ca2f39530c07365  pingu.gif
 ```
 
-Como podemos verificar, as *hashes* são exatamente iguais, portanto o ficheiro enviado e o ficheiro recebido são exatamente iguais - o resultado pretendido.
+Para todos os testes realizados, as *checksums* foram, para todos eles, exatamente iguais, portanto o ficheiro enviado e o ficheiro recebido são exatamente iguais - o resultado pretendido. Ou seja, o protocolo é capaz de ultrapassar erros que possam ocorrer em qualquer um dos lados do eixo de comunicações.
 
 ## 6. Eficiência de protocolo de ligação
+
+A eficiência de um protocolo é a razão de tempo gasto entre o envio ou leitura de dados e o tempo gasto entre a espera pelas confirmações.
 
 ### 6.1 Aspetos de implemetação relativas a *ARQ* (*Automatic Repeate reQuest*)
 
 O protcolo implementado carateriza-se pelo facto de ter a funcionalidade *ARQ*, neste caso em particular estamos perante um caso especial de *Go back N* onde $$ N=1 $$ 
-Isto é, *Stop & Wait* - o emissor não deve avançar sem antes aguardar por uma resposta do recetor, seja ela uma resposta positiva ou uma rejeição devido a erros. Além disso, para *Go Back N* existe a necessidade de haver um número de sequência, como acontece na nossa implementação com a variável `sequence_number` defina em `protocol.c`, e que permita ordenar as tramas de acordo com a ordem pretendida. Para *Stop & Wait* essa variável apenas precisa de alternar entre `0` e `1`.
+Isto é, *Stop & Wait* - o emissor não deve avançar sem antes aguardar por uma resposta do recetor, seja ela uma resposta positiva ou uma rejeição devido a erros. Além disso, para *Go Back N* existe a necessidade de haver um número de sequência, como acontece na nossa implementação com a variável `sequence_number` definida no ficheiro `protocol.c`, e que permita ordenar as tramas de acordo com a ordem pretendida. Para *Stop & Wait* essa variável apenas precisa de alternar entre `0` e `1`.
 
-Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que este faça frente à eficiência de outros mecanismos, como é o caso do *selective repeat* - onde o envio de dados prossegue mesmo em caso de erro (esses erros são corrigidos alguns envios depois). Deste modo, os valores de eficiência para *Stop & Wait* são dados pelas seguintes fórmulas:
+Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que este faça frente à eficiência de outros mecanismos, como é o caso do *selective repeat* - onde o envio de dados prossegue mesmo em caso de erro (esses erros são corrigidos alguns envios depois). 
 
-$$ a = \frac{T_{prop}}{T_f} $$
-$$ S = \frac{T_f}{T_f+2T_{prop}} = \frac{1}{1+2a} $$
-$$ S_{e} = \frac{T_f}{E[A](T_f+2T_{prop})} = \frac{1}{E[A](1+2a)} = \frac{1-p_e}{1-2a} $$
+### 6.2 Caraterização estatística da eficiência do protocolo { #estatisticas }
+
+Deste modo, os valores de eficiência para *Stop & Wait* são dados pelas seguintes fórmulas, disponíveis nos diapositivos apresentados nas aulas teóricas:
+
+$$ a = \frac{T_{prop}}{T_f} $$ Razão entre o tempo de propagação e o tempo de envio dos dados de um trama.
+$$ S = \frac{T_f}{T_f+2T_{prop}} = \frac{1}{1+2a} $$ Eficiência do protocolo sem quaisquer erros.
+$$ S_{e} = \frac{T_f}{E[A](T_f+2T_{prop})} = \frac{1}{E[A](1+2a)} = \frac{1-FER}{1+2a} $$ Eficiência do protocolo com erros.
 
 Onde:
 
-* <i>T<sub>f</sub></i> : tempo entre envios de tramas
-* <i>T<sub>prop</sub></i> : tempo de propagação
-* <i>p<sub>e</sub></i> : probabilidade de erro de uma trama 
-* <i>E[A]</i> : número expectável de tentativas para se transmitir uma trama com sucesso
+* *T<sub>f</sub>*: tempo entre envio de dados de uma trama;
+* *T<sub>prop</sub>*: tempo de propagação de uma trama ao longo do canal de comunicações;
+* *FER*: probabilidade de erro de uma trama (*Frame Error Ratio*);
+* *E[A]*: número médio de tentativas para se transmitir uma trama com sucesso.
 
-### 6.2 Caraterização estatística da eficiência do protocolo
+Como se observa, surgem várias conclusões. A primeira é a de que se o valor de *a* for elevado, então, a eficiência será baixa. O principal motivo para que isto ocorra pode ser a distância entre os pontos de comunicação, bem como, o facto do tamanho da trama de informação não ser suficientemente grande - o que conduz a um tempo de envio menor, e consequentemente a um valor de *a* maior. Já a segunda conclusão a que chegamos é a de que se a probabilidade de uma trama conter erros - *FER* - for elevada, naturalmente, a eficiência do protocolo irá cair. A modelação dos valores da eficiência de acordo com a probabilidade de erro de uma trama pode ser observada no gráfico seguinte:
 
-![falta fazer os graficos e alterar o codigo](imgem de graficos)
-![falta fazer os graficos e alterar o codigo](imgem de graficos)
+![Valor da eficiência de acordo com o FER](./doc/efficiency.png)
+
+Neste gráfico, importa referir que o cenário representado pela linha púrpura é hipotético, na medida, em que todas as tramas possuem erros o que impossibilita a transferência da informação, resultado, obviamente, numa eficiência nula e constante. Por outro lado, percebe-se, pela análise do gráfico, que o valor de *a* tem a sua influência indepedentemente do valor de *FER*. Não obstante, nota-se também que para valores baixos de *a*, a eficiência depende praticamente do *FER*.
+
+Tendo tudo isto em conta, a escolha de *Stop & Wait* para mecanismo de *ARQ* deve ser pensada, sobretudo, de acordo com a distância entre o emissor e o recetor, mesmo que seja mais fácil de ser implementado ou que o canal tenha uma capacidade elevada e com pouca probabilidade de erros.
+
 
 ## 7. Conclusões
 
-Este foi um trabalho que certamente gerou um certo interesse da maioria dos alunos, sobretudo pelo facto de poderem observar fisicamente a transferência de ficheiros entre os 2 computadores no laboratório. Todavia, mesmo sendo um trabalho exigente é ótimo que assim o seja, pois obriga os estudantes a estarem a par dos conceitos teóricos leccionados nas aulas. Agora, em retrospetiva, verificamos que com este pequeno projeto foi possível cimentar os conhecimentos prévios em C mas também descobrir, como efetivamente, a informação era transmitida por uma porta série, bem antes da internet dar os seus primeiros passos e revolucionar essa transferência da informação.
+Este foi um trabalho que certamente gerou um certo interesse da maioria dos alunos, sobretudo pelo facto de poderem observar fisicamente a transferência de ficheiros entre os 2 computadores no laboratório. Todavia, mesmo sendo um trabalho exigente é ótimo que assim o seja, pois obriga os estudantes a estarem a par dos conceitos teóricos leccionados nas aulas. 
+
+Agora, em retrospetiva, verificamos que com este pequeno projeto foi possível cimentar os conhecimentos prévios em C mas também descobrir, como efetivamente, a informação era transmitida por uma porta série, bem antes da internet dar os seus primeiros passos e revolucionar essa transferência da informação.
 
 \newpage
 
@@ -145,7 +156,7 @@ Este foi um trabalho que certamente gerou um certo interesse da maioria dos alun
 ### `application.h`
 
 ```{.c .numberLines}
-/*
+*
  * application.h
  * Serial port application protocol
  * RC @ L.EIC 2122
@@ -154,13 +165,13 @@ Este foi um trabalho que certamente gerou um certo interesse da maioria dos alun
 
 #ifndef _APPLICATION_H_
 
+/* Control command for application packets */
 typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
+/* Parameter command for application packets */
 typedef enum { SIZE, NAME } paramCmd;
 
 #endif /* _APPLICATION_H_ */
 ```
-
-\newpage
 
 ### `sender.c`
 
@@ -176,6 +187,7 @@ typedef enum { SIZE, NAME } paramCmd;
 
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "application.h"
@@ -186,19 +198,22 @@ typedef enum { SIZE, NAME } paramCmd;
 int
 main (int argc, char **argv)
 {
-        if (argc < 3)
-        {
+        if (argc < 3) {
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-
+#ifdef DEBUG
+        if (TPROP >= TOUT)
+                perr("[tprop >= tout] might lead to undefined behaviour");
+        srand(time(0));
+#endif
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
-        passert(fd_file >= 0, "sender.c:30, open", -1);
+        passert(fd_file >= 0, "sender.c :: open", -1);
 
         int fd;
         fd = llopen(atoi(argv[1]), TRANSMITTER);
-        passert(fd >= 0, "sender.c:34, llopen", -1);
+        passert(fd >= 0, "sender.c :: llopen", -1);
 
         uint8_t frag[MAX_PACKET_SIZE];
 
@@ -213,7 +228,7 @@ main (int argc, char **argv)
 
         int wb;
         wb = llwrite(fd, frag, 3 + sizeof(off_t));
-        passert(wb >= 0, "sender.c:49, llwrite", -1);  
+        passert(wb >= 0, "sender.c :: llwrite", -1);  
 
         uint16_t n;
         n = size_file / (MAX_PACKET_SIZE - 4);
@@ -230,7 +245,7 @@ main (int argc, char **argv)
                 frag[3] = rb % 256;
 
                 wb = llwrite(fd, frag, rb + 4);
-                passert(wb >= 0, "sender.c:66, llwrite", -1);
+                passert(wb >= 0, "sender.c :: llwrite", -1);
         }
 
         frag[0] = STOP;
@@ -239,7 +254,7 @@ main (int argc, char **argv)
         memcpy(frag + 3, &size_file, sizeof(off_t));
 
         wb = llwrite(fd, frag, 3 + sizeof(off_t));
-        passert(wb >= 0, "sender.c:75, llwrite", -1);
+        passert(wb >= 0, "sender.c :: llwrite", -1);
 
         llclose(fd);
         close(fd_file);
@@ -247,8 +262,6 @@ main (int argc, char **argv)
         return 0;
 }
 ```
-
-\newpage
 
 ### `receiver.c`
 
@@ -272,19 +285,18 @@ main (int argc, char **argv)
 int 
 main(int argc, char **argv)
 {
-        if (argc < 3)
-        {
+        if (argc < 3) {
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
 
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
-        passert(fd_file >= 0, "receiver.c:28, open", -1);
+        passert(fd_file >= 0, "receiver.c :: open", -1);
 
         int fd;
         fd = llopen(atoi(argv[1]), RECEIVER);
-        passert(fd >= 0, "receiver.c:32, llopen", -1);
+        passert(fd >= 0, "receiver.c :: llopen", -1);
 
         uint8_t pkgn = 0;
         uint8_t frag[MAX_PACKET_SIZE];
@@ -306,8 +318,7 @@ main(int argc, char **argv)
                 case START:
                         break;
                 case STOP:
-                        /* Take the last disc frame */
-                        llread(fd, frag);
+                        llread(fd, frag);   /* Take the last disc frame */
                         goto finish;
                 default:
                         break;
@@ -389,8 +400,6 @@ llclose(int fd);
 #endif /* _PROTOCOL_H_ */
 ```
 
-\newpage
-
 ### `protocol.c`
 
 ```{.c .numberLines}
@@ -414,14 +423,15 @@ llclose(int fd);
 #define IS_FLAG(c) (c == FLAG)
 #define ESCAPED_BYTE(c) (IS_ESCAPE(c) || IS_FLAG(c))
 
-#define BIT_SET(m, i) (m & (1 << i))
+#define BITSET(m, i) (m & (1 << i))
 
 /* commands */ 
 typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
-static const uint8_t cmds[7] = { 0x3, 0xB, 0x7, 0x5, 0x1, 0x85, 0x81 };
+static const uint8_t cmds[7] = { 0x3, 0xb, 0x7, 0x5, 0x1, 0x85, 0x81 };
 
 #ifdef DEBUG
-static const char cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
+static const char 
+cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
 #endif
 
 /* reading */
@@ -454,6 +464,7 @@ install_sigalrm(void (*handler)(int))
 }
 
 
+
 static int 
 term_conf_init(int port)
 {
@@ -480,11 +491,9 @@ term_conf_init(int port)
         tcflush(port_fd, TCIOFLUSH);
         if (tcsetattr(port_fd, TCSANOW, &newtio) == -1)
                 return -1;
-
 #ifdef DEBUG
-        plog("termios struct set with sucess");
+        plog("termios struct set with success\n");
 #endif
-
         return port_fd;
 }
 
@@ -499,6 +508,7 @@ term_conf_end(int fd)
 }
 
 
+
 static int
 send_frame_us(int fd, uint8_t cmd, uint8_t addr) 
 {        
@@ -511,15 +521,11 @@ send_frame_us(int fd, uint8_t cmd, uint8_t addr)
 
         if (write(fd, frame, sizeof(frame)) < 0)
                 return -1;
-
 #ifdef DEBUG
-        char fsent[40];
         if (addr == TRANSMITTER)
-                snprintf(fsent, 40, "frame sent with %s @ TRANSMITTER", cmds_str[cmd]);
+                plog("frame sent with %s @ TRANSMITTER\n", cmds_str[cmd]);
         else if (addr == RECEIVER)
-                snprintf(fsent, 40, "frame sent with %s @ RECEIVER", cmds_str[cmd]);
-
-        plog(fsent);
+                plog("frame sent with %s @ RECEIVER\n", cmds_str[cmd]);
 #endif
         return 0;
 }
@@ -542,13 +548,13 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
                         break;
                 case FLAG_RCV:
                         if (frame[st] == addr)
-                                st = A_RCV;
+                                    st = A_RCV;
                         else if (frame[st] != FLAG)
                                 st = START;
                         break;
                 case A_RCV:
                         for (i = 0; i < 7; i++) {
-                                if (BIT_SET(cmd_mask, i) && frame[st] == cmds[i]) {
+                                if (BITSET(cmd_mask, i) && frame[st] == cmds[i]) {
                                         st = C_RCV;
                                         cmd = i;
                                 }
@@ -580,17 +586,12 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
         connection_alive = retries < MAX_RETRIES;
         if (!connection_alive)
                 return -1;
-
 #ifdef DEBUG
-        char fread[40];
         if (addr == RECEIVER)
-                snprintf(fread, 40, "frame read with %s @ TRANSMITTER", cmds_str[cmd]);
+                plog("frame read with %s @ TRANSMITTER\n", cmds_str[cmd]);
         else if (addr == TRANSMITTER)
-                snprintf(fread, 40, "frame read with %s @ RECEIVER", cmds_str[cmd]);
-
-        plog(fread);
+                plog("frame read with %s @ RECEIVER\n", cmds_str[cmd]);
 #endif
-
         uint8_t frame_i_ans = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
         if (connector == TRANSMITTER && cmd_mask == frame_i_ans)
                 return check_resending(frame[2]);
@@ -599,10 +600,11 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
 }
 
 
+
 void 
 trmt_alrm_handler_open(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         retries++;
         send_frame_us(port_fd, SET, TRANSMITTER);
 }
@@ -625,12 +627,12 @@ llopen_trmt(int fd)
         install_sigalrm(trmt_alrm_handler_open);
 
         send_frame_us(fd, SET, TRANSMITTER);
-        alarm(TIMEOUT);
+        alarm(TOUT);
         conn_est = read_frame_us(fd, 1 << UA, RECEIVER);
         alarm(0);
 
         if (!connection_alive) {
-                perr("can't establish a connection with the RECEIVER");
+                perr("can't establish a connection with the RECEIVER\n");
                 return -1;
         }
 
@@ -653,6 +655,7 @@ llopen(int port, const uint8_t endpt)
         connector = endpt;
         return fd;
 }
+
 
 
 static void
@@ -680,7 +683,7 @@ encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
         
         ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
         *dest = (uint8_t *)malloc(nlen);
-        passert(dest != NULL, "protocol.c:287, malloc", -1);
+        passert(dest != NULL, "protocol.c :: malloc", -1);
 
         for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
                 encode_cpy(*dest, i, src[j]);
@@ -704,31 +707,26 @@ decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
 }
 
 
+
 static ssize_t
-write_data(void)
+trmt_send_data(void)
 {
         ssize_t wb;
         wb = write(port_fd, buffer_frame, buffer_frame_len);
-
 #ifdef DEBUG
-        char finfo[50];
-
-        snprintf(finfo, 50, "send frame no. %d of %ld bytes", sequence_number, wb);
-        plog(finfo);
-        snprintf(finfo, 50, "waiting on response from RECEIVER for frame no. %d", 
-                                                                sequence_number);
-        plog(finfo);
+        uint8_t sn = sequence_number;
+        plog("sent frame no. %d of %ld bytes\n", sn, wb);
+        plog("waiting on response from RECEIVER for frame no. %d\n", sn);
 #endif
-
         return wb;
 }
 
 void
 trmt_alrm_handler_write(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         ++retries;
-        write_data();
+        trmt_send_data();
 }
 
 static int 
@@ -768,23 +766,44 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
 
         do {
-                wb = write_data();
+                wb = trmt_send_data();
                 if (wb < 0)
                         return wb;
 
-                alarm(TIMEOUT);
+                alarm(TOUT);
                 rsnd = read_frame_us(fd, mask, RECEIVER);
                 alarm(0);
         } while (connection_alive && rsnd == RESEND);
 
         if (!connection_alive) {
-                perr("can't establish a connection with RECEIVER");
+                perr("can't establish a connection with RECEIVER\n");
                 return -1;
         }
 
         return wb;
 }
 
+
+
+static int 
+recv_send_response(int fd, const uint8_t *buffer, const ssize_t len) 
+{
+        ssize_t i;
+        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
+        for (i = 1; i < len - 1; i++)
+                bcc ^= buffer[i];
+#ifdef DEBUG
+        bcc ^= (rand() % 100 < FER) ? 0xff : 0x0; /* artificial error on bcc */
+        sleep(TPROP); /* artificial propagation time */
+#endif  
+        uint8_t cmd;
+        cmd = sequence_number ? RR_1 : RR_0;
+        if (bcc != expect_bcc)
+                cmd = sequence_number ? REJ_1 : REJ_0;
+
+        send_frame_us(fd, cmd, RECEIVER);
+        return (bcc == expect_bcc) ? len : -1;
+}
 
 ssize_t
 llread(int fd, uint8_t *buffer)
@@ -844,41 +863,32 @@ llread(int fd, uint8_t *buffer)
                 }
         }
 
+#ifdef DEBUG
+        uint8_t sn = sequence_number;
+        plog("frame no. %d read with %ld bytes\n", sn, c + 5);
+#endif
+
         if (disc) {
 #ifdef DEBUG
-                plog("disconnect frame detected");
+                plog("disconnect frame detected\n");
 #endif
                 send_frame_us(fd, DISC, RECEIVER);
                 return -1;
         }
 
-#ifdef DEBUG
-        char fread[40];
-        snprintf(fread, 40, "frame no. %d read with %ld bytes", sequence_number, c + 5);
-        plog(fread);
-#endif
-
         ssize_t len;
         len = decode_data(buffer, frame + 4, c);
+        len = recv_send_response(fd, buffer, len);
 
-        ssize_t i;
-        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
-        for (i = 1; i < len - 1; i++)
-                bcc ^= buffer[i];
-
-        uint8_t cmd;
-        cmd = sequence_number ? RR_1 : RR_0;
-        if (bcc != expect_bcc)
-                cmd = sequence_number ? REJ_1 : REJ_0;
-
-        send_frame_us(fd, cmd, RECEIVER);
-        return (bcc == expect_bcc) ? len : -1;
+        return len;
 }
+
+
 
 void 
 trmt_alrm_handler_close(int unused) 
 {
-        alarm(TIMEOUT);
+        alarm(TOUT);
         retries++;
         send_frame_us(port_fd, DISC, TRANSMITTER);
 }
@@ -892,19 +902,19 @@ llclose(int fd)
             
                 send_frame_us(fd, DISC, TRANSMITTER);
 
-                alarm(TIMEOUT);
+                alarm(TOUT);
                 read_frame_us(fd, 1 << DISC, RECEIVER);
                 alarm(0);
                 
                 if (!connection_alive) {
-                        perr("can't establish a connection with RECEIVER");
+                        perr("can't establish a connection with RECEIVER\n");
                         return -1;
                 }
 
                 send_frame_us(fd, UA, TRANSMITTER);
         }
 
-        sleep(2); /* Gives time to all the info flow througth the communication channel */
+        sleep(2); /* gives time to all the info flow through the communications channel */
         return term_conf_end(fd);
 }
 ```
@@ -924,18 +934,35 @@ llclose(int fd)
 #ifndef _UTILS_H_
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void plog(const char *msg);
-void perr(const char *msg);
+/***
+ * Writes a message to stdout
+ * @param const char *[in] - message to be written
+ */
+void plog(const char *format, ...);
+
+/***
+ * Writes a message to stderr
+ * @param const char *[in] - message to be written
+ */
+void perr(const char *format, ...);
+
+/***
+ * Verifies whether a condition is valid or not, 
+ * if it valid then nothing is done, otherwise it writes the message
+ * passed as argument and finishes the program imediatly 
+ * @param const int[in] - condition result
+ * @param const char *[in] - message to be written
+ * @param const int[in] - program's exit code
+ */
 void passert(const int cond, const char *msg, const int code);
 
 #endif /* _UTILS_H_ */
 ```
-
-\newpage
 
 ### `utils.c`
 
@@ -949,23 +976,32 @@ void passert(const int cond, const char *msg, const int code);
 
 #include "utils.h"
 
+
 void 
-plog(const char *msg)
+plog(const char *fmt, ...)
 {
-        fprintf(stdout, "log: %s\n", msg);
+        va_list args;
+
+        va_start(args, fmt);
+        vfprintf(stdout, fmt, args);
+        va_end(args);
 }
 
 void
-perr(const char *msg)
+perr(const char *fmt, ...)
 {
-        fprintf(stderr, "err: %s\n", msg);
+        va_list args;
+
+        va_start(args, fmt);
+        vfprintf(stderr, fmt, args);
+        va_end(args);
 }
 
 void 
 passert(const int cond, const char *msg, const int code)
 {
         if (!cond) {
-                fprintf(stderr, "err: %s :: %s\n", msg, strerror(errno));
+                fprintf(stderr, "die: %s :: %s\n", msg, strerror(errno));
                 exit(code);
         }
 }
