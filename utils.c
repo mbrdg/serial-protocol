@@ -7,23 +7,32 @@
 
 #include "utils.h"
 
+
 void 
-plog(const char *msg)
+plog(const char *fmt, ...)
 {
-        fprintf(stdout, "log: %s\n", msg);
+        va_list args;
+
+        va_start(args, fmt);
+        vfprintf(stdout, fmt, args);
+        va_end(args);
 }
 
 void
-perr(const char *msg)
+perr(const char *fmt, ...)
 {
-        fprintf(stderr, "err: %s\n", msg);
+        va_list args;
+
+        va_start(args, fmt);
+        vfprintf(stderr, fmt, args);
+        va_end(args);
 }
 
 void 
 passert(const int cond, const char *msg, const int code)
 {
         if (!cond) {
-                fprintf(stderr, "err: %s :: %s\n", msg, strerror(errno));
+                fprintf(stderr, "die: %s :: %s\n", msg, strerror(errno));
                 exit(code);
         }
 }

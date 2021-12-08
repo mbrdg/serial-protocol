@@ -24,11 +24,11 @@ main(int argc, char **argv)
 
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
-        passert(fd_file >= 0, "receiver.c:28, open", -1);
+        passert(fd_file >= 0, "receiver.c :: open", -1);
 
         int fd;
         fd = llopen(atoi(argv[1]), RECEIVER);
-        passert(fd >= 0, "receiver.c:32, llopen", -1);
+        passert(fd >= 0, "receiver.c :: llopen", -1);
 
         uint8_t pkgn = 0;
         uint8_t frag[MAX_PACKET_SIZE];

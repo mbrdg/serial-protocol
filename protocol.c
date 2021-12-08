@@ -18,14 +18,15 @@
 #define IS_FLAG(c) (c == FLAG)
 #define ESCAPED_BYTE(c) (IS_ESCAPE(c) || IS_FLAG(c))
 
-#define BIT_SET(m, i) (m & (1 << i))
+#define BITSET(m, i) (m & (1 << i))
 
 /* commands */ 
 typedef enum { SET, DISC, UA, RR_0, REJ_0, RR_1, REJ_1 } frameCmd;
 static const uint8_t cmds[7] = { 0x3, 0xb, 0x7, 0x5, 0x1, 0x85, 0x81 };
 
 #ifdef DEBUG
-static const char cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
+static const char 
+cmds_str[7][6] = { "SET", "DISC", "UA", "RR_0", "REJ_0", "RR_1", "REJ_1" };
 #endif
 
 /* reading */
@@ -58,6 +59,7 @@ install_sigalrm(void (*handler)(int))
 }
 
 
+
 static int 
 term_conf_init(int port)
 {
@@ -84,11 +86,9 @@ term_conf_init(int port)
         tcflush(port_fd, TCIOFLUSH);
         if (tcsetattr(port_fd, TCSANOW, &newtio) == -1)
                 return -1;
-
 #ifdef DEBUG
-        plog("termios struct set with sucess");
+        plog("termios struct set with success\n");
 #endif
-
         return port_fd;
 }
 
@@ -101,6 +101,7 @@ term_conf_end(int fd)
         close(fd);
         return 0;
 }
+
 
 
 static int
@@ -116,13 +117,10 @@ send_frame_us(int fd, uint8_t cmd, uint8_t addr)
         if (write(fd, frame, sizeof(frame)) < 0)
                 return -1;
 #ifdef DEBUG
-        char fsent[40];
         if (addr == TRANSMITTER)
-                snprintf(fsent, 40, "frame sent with %s @ TRANSMITTER", cmds_str[cmd]);
+                plog("frame sent with %s @ TRANSMITTER\n", cmds_str[cmd]);
         else if (addr == RECEIVER)
-                snprintf(fsent, 40, "frame sent with %s @ RECEIVER", cmds_str[cmd]);
-
-        plog(fsent);
+                plog("frame sent with %s @ RECEIVER\n", cmds_str[cmd]);
 #endif
         return 0;
 }
@@ -145,13 +143,13 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
                         break;
                 case FLAG_RCV:
                         if (frame[st] == addr)
-                                st = A_RCV;
+                                    st = A_RCV;
                         else if (frame[st] != FLAG)
                                 st = START;
                         break;
                 case A_RCV:
                         for (i = 0; i < 7; i++) {
-                                if (BIT_SET(cmd_mask, i) && frame[st] == cmds[i]) {
+                                if (BITSET(cmd_mask, i) && frame[st] == cmds[i]) {
                                         st = C_RCV;
                                         cmd = i;
                                 }
@@ -184,13 +182,10 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
         if (!connection_alive)
                 return -1;
 #ifdef DEBUG
-        char fread[40];
         if (addr == RECEIVER)
-                snprintf(fread, 40, "frame read with %s @ TRANSMITTER", cmds_str[cmd]);
+                plog("frame read with %s @ TRANSMITTER\n", cmds_str[cmd]);
         else if (addr == TRANSMITTER)
-                snprintf(fread, 40, "frame read with %s @ RECEIVER", cmds_str[cmd]);
-
-        plog(fread);
+                plog("frame read with %s @ RECEIVER\n", cmds_str[cmd]);
 #endif
         uint8_t frame_i_ans = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
         if (connector == TRANSMITTER && cmd_mask == frame_i_ans)
@@ -198,6 +193,7 @@ read_frame_us(int fd, const uint8_t cmd_mask, const uint8_t addr)
 
         return 0;
 }
+
 
 
 void 
@@ -231,7 +227,7 @@ llopen_trmt(int fd)
         alarm(0);
 
         if (!connection_alive) {
-                perr("can't establish a connection with the RECEIVER");
+                perr("can't establish a connection with the RECEIVER\n");
                 return -1;
         }
 
@@ -254,6 +250,7 @@ llopen(int port, const uint8_t endpt)
         connector = endpt;
         return fd;
 }
+
 
 
 static void
@@ -281,7 +278,7 @@ encode_data(uint8_t **dest, const uint8_t *src, ssize_t len)
         
         ssize_t nlen = len + inc + ESCAPED_BYTE(bcc) + 1;
         *dest = (uint8_t *)malloc(nlen);
-        passert(dest != NULL, "protocol.c:284, malloc", -1);
+        passert(dest != NULL, "protocol.c :: malloc", -1);
 
         for (i = 0, j = 0; j < len; i += ESCAPED_BYTE(src[j]) + 1, j++)
                 encode_cpy(*dest, i, src[j]);
@@ -305,18 +302,16 @@ decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
 }
 
 
+
 static ssize_t
-write_data(void)
+trmt_send_data(void)
 {
         ssize_t wb;
         wb = write(port_fd, buffer_frame, buffer_frame_len);
 #ifdef DEBUG
-        char finfo[50];
-
-        snprintf(finfo, 50, "sent frame no. %d of %ld bytes", sequence_number, wb);
-        plog(finfo);
-        snprintf(finfo, 50, "waiting on response from RECEIVER for frame no. %d", sequence_number);
-        plog(finfo);
+        uint8_t sn = sequence_number;
+        plog("sent frame no. %d of %ld bytes\n", sn, wb);
+        plog("waiting on response from RECEIVER for frame no. %d\n", sn);
 #endif
         return wb;
 }
@@ -326,7 +321,7 @@ trmt_alrm_handler_write(int unused)
 {
         alarm(TOUT);
         ++retries;
-        write_data();
+        trmt_send_data();
 }
 
 static int 
@@ -366,7 +361,7 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
         uint8_t mask = 1 << RR_0 | 1 << REJ_0 | 1 << RR_1 | 1 << REJ_1;
 
         do {
-                wb = write_data();
+                wb = trmt_send_data();
                 if (wb < 0)
                         return wb;
 
@@ -376,13 +371,34 @@ llwrite(int fd, uint8_t *buffer, ssize_t len)
         } while (connection_alive && rsnd == RESEND);
 
         if (!connection_alive) {
-                perr("can't establish a connection with RECEIVER");
+                perr("can't establish a connection with RECEIVER\n");
                 return -1;
         }
 
         return wb;
 }
 
+
+
+static int 
+recv_send_response(int fd, const uint8_t *buffer, const ssize_t len) 
+{
+        ssize_t i;
+        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
+        for (i = 1; i < len - 1; i++)
+                bcc ^= buffer[i];
+#ifdef DEBUG
+        bcc ^= (rand() % 100 < FER) ? 0xff : 0x0; /* artificial error on bcc */
+        sleep(TPROP); /* artificial propagation time */
+#endif  
+        uint8_t cmd;
+        cmd = sequence_number ? RR_1 : RR_0;
+        if (bcc != expect_bcc)
+                cmd = sequence_number ? REJ_1 : REJ_0;
+
+        send_frame_us(fd, cmd, RECEIVER);
+        return (bcc == expect_bcc) ? len : -1;
+}
 
 ssize_t
 llread(int fd, uint8_t *buffer)
@@ -442,38 +458,27 @@ llread(int fd, uint8_t *buffer)
                 }
         }
 
+#ifdef DEBUG
+        uint8_t sn = sequence_number;
+        plog("frame no. %d read with %ld bytes\n", sn, c + 5);
+#endif
+
         if (disc) {
 #ifdef DEBUG
-                plog("disconnect frame detected");
+                plog("disconnect frame detected\n");
 #endif
                 send_frame_us(fd, DISC, RECEIVER);
                 return -1;
         }
 
-#ifdef DEBUG
-        char fread[40];
-        snprintf(fread, 40, "frame no. %d read with %ld bytes", sequence_number, c + 5);
-        plog(fread);
-#endif
         ssize_t len;
         len = decode_data(buffer, frame + 4, c);
+        len = recv_send_response(fd, buffer, len);
 
-        ssize_t i;
-        uint8_t bcc = buffer[0], expect_bcc = buffer[len-1];
-        for (i = 1; i < len - 1; i++)
-                bcc ^= buffer[i];
-#ifdef DEBUG
-        bcc ^= (rand() % 100 <= FER) ? 0xff : 0x0; /* artificial error on bcc */
-        sleep(TPROP); /* artificial propagation time */ 
-#endif  
-        uint8_t cmd;
-        cmd = sequence_number ? RR_1 : RR_0;
-        if (bcc != expect_bcc)
-                cmd = sequence_number ? REJ_1 : REJ_0;
-
-        send_frame_us(fd, cmd, RECEIVER);
-        return (bcc == expect_bcc) ? len : -1;
+        return len;
 }
+
+
 
 void 
 trmt_alrm_handler_close(int unused) 
@@ -497,14 +502,14 @@ llclose(int fd)
                 alarm(0);
                 
                 if (!connection_alive) {
-                        perr("can't establish a connection with RECEIVER");
+                        perr("can't establish a connection with RECEIVER\n");
                         return -1;
                 }
 
                 send_frame_us(fd, UA, TRANSMITTER);
         }
 
-        sleep(2); /* Gives time to all the info flow througth the communication channel */
+        sleep(2); /* gives time to all the info flow through the communications channel */
         return term_conf_end(fd);
 }
 

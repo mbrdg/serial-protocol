@@ -31,11 +31,11 @@ main (int argc, char **argv)
 #endif
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
-        passert(fd_file >= 0, "sender.c:30, open", -1);
+        passert(fd_file >= 0, "sender.c :: open", -1);
 
         int fd;
         fd = llopen(atoi(argv[1]), TRANSMITTER);
-        passert(fd >= 0, "sender.c:34, llopen", -1);
+        passert(fd >= 0, "sender.c :: llopen", -1);
 
         uint8_t frag[MAX_PACKET_SIZE];
 
@@ -50,7 +50,7 @@ main (int argc, char **argv)
 
         int wb;
         wb = llwrite(fd, frag, 3 + sizeof(off_t));
-        passert(wb >= 0, "sender.c:49, llwrite", -1);  
+        passert(wb >= 0, "sender.c :: llwrite", -1);  
 
         uint16_t n;
         n = size_file / (MAX_PACKET_SIZE - 4);
@@ -67,7 +67,7 @@ main (int argc, char **argv)
                 frag[3] = rb % 256;
 
                 wb = llwrite(fd, frag, rb + 4);
-                passert(wb >= 0, "sender.c:66, llwrite", -1);
+                passert(wb >= 0, "sender.c :: llwrite", -1);
         }
 
         frag[0] = STOP;
@@ -76,7 +76,7 @@ main (int argc, char **argv)
         memcpy(frag + 3, &size_file, sizeof(off_t));
 
         wb = llwrite(fd, frag, 3 + sizeof(off_t));
-        passert(wb >= 0, "sender.c:75, llwrite", -1);
+        passert(wb >= 0, "sender.c :: llwrite", -1);
 
         llclose(fd);
         close(fd_file);
