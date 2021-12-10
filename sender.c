@@ -23,9 +23,12 @@ main (int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-#ifdef debug
-        const clock_t begin = bclk();
+
+#ifdef DEBUG
+        clock_t begin;
+        begin = bclk();
 #endif
+
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
         passert(fd_file >= 0, "sender.c :: open", -1);
@@ -77,9 +80,11 @@ main (int argc, char **argv)
 
         llclose(fd);
         close(fd_file);
-#ifdef debug
+
+#ifdef DEBUG
         eclk(&begin);
 #endif
+
         return 0;
 }
 

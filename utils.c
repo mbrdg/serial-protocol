@@ -40,11 +40,11 @@ passert(const int cond, const char *msg, const int code)
 }
 
 
-const clock_t
+clock_t
 bclk(void) 
 {
         plog("clock: began\n");
-        const clock_t start = clock();
+        clock_t start = clock();
         return start;
 }
 
@@ -52,7 +52,7 @@ void
 eclk(const clock_t *start)
 {
         clock_t end = clock();
-        double elapsed = (double)(end - *start) * 1000.0 / CLOCKS_PER_SEC;
+        double elapsed = (double)(end - (*start)) * 1000.0 / CLOCKS_PER_SEC;
         plog("clock: ended\n");
         plog("clock: took %.5f ms\n", elapsed);
 }

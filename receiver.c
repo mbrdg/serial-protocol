@@ -24,9 +24,11 @@ main(int argc, char **argv)
         }
 
 #ifdef DEBUG
-        const clock_t begin = bclk();
-        srand(time(0)); /* required in order to make random errors */
+        clock_t begin;
+        begin = bclk();
+        srand(begin); /* required in order to make random errors */
 #endif
+        
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
         passert(fd_file >= 0, "receiver.c :: open", -1);
@@ -37,19 +39,19 @@ main(int argc, char **argv)
 
         uint8_t pkgn = 0;
         uint8_t frag[MAX_PACKET_SIZE];
+        ssize_t rb, len;
+
         while (1) {
-                ssize_t rb;
                 rb = llread(fd, frag);
                 if (rb < 0)
                         continue;
 
-                ssize_t len;
                 switch (frag[0]) {
                 case DATA:
-                        if (frag[1] >= (pkgn % 255)) {
+                        if (frag[1] > (pkgn % 256)) {
                                 len = frag[2] * 256 + frag[3];
                                 write(fd_file, frag + 4, len);
-                                ++pkgn;
+                                pkgn++;
                         }
                         break;
                 case START:
@@ -65,9 +67,11 @@ main(int argc, char **argv)
 finish:
         llclose(fd);
         close(fd_file);
+
 #ifdef DEBUG
         eclk(&begin);
 #endif
+
         return 0;
 }
 

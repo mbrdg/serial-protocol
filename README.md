@@ -57,7 +57,7 @@ Lê os dados disponíveis no canal de comunicações, escrevendo-os no `buffer` 
 ### 3.4 `int llclose(int fd)` { #llclose }
 Fecha o canal de comunicações.
 
-### 3.5 Opções
+### 3.5 Opções { #opcoes }
 O protocolo permite que se configurem algumas opções (em tempo de compilação) a partir do ficheiro `makefile`, são elas:
 
 | Opção | Descrição |
@@ -220,6 +220,15 @@ Neste gráfico, importa referir que o cenário representado pela linha púrpura 
 
 Tendo tudo isto em conta, a escolha de *Stop & Wait* para mecanismo de *ARQ* deve ser pensada, sobretudo, de acordo com a distância entre o emissor e o recetor, mesmo que seja mais fácil de ser implementado ou que o canal tenha uma capacidade elevada e com pouca probabilidade de erros.
 
+\newpage 
+
+### 6.3 Performance
+
+O gráfico seguinte mostra os tempos de envio do ficheiro fornecido `pinguim.gif` de acordo com o tamanho máximo para um pacote de dados da aplicação. Nota que este valor pode ser alterado nas [opções](#opcoes) do ficheiro `makefile`.
+
+![Tempos de envio de acordo com o tamanho dos pacotes](./doc/benchmarks.png)
+
+Como se observa, existe um valor mínimo para os tempos de envio que ronda os 256 *bytes*. Isto significa, que o protocolo a eficiência do protocolo começa a cair com pacotes maiores. Podemos então assim concluir que se para pacotes mais pequenos o número de fragmentos a enviar causa um acréscimo ao tempo de envio, por outro lado, para pacotes maior o maior esforço de processamento abafa a suposta rapidez obtida de um menor número de envios de fragmentos. 
 
 ## 7. Conclusões
 
@@ -281,9 +290,12 @@ main (int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-#ifdef debug
-        const clock_t begin = bclk();
+
+#ifdef DEBUG
+        clock_t begin;
+        begin = bclk();
 #endif
+
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
         passert(fd_file >= 0, "sender.c :: open", -1);
@@ -335,9 +347,11 @@ main (int argc, char **argv)
 
         llclose(fd);
         close(fd_file);
-#ifdef debug
+
+#ifdef DEBUG
         eclk(&begin);
 #endif
+
         return 0;
 }
 ```
@@ -371,9 +385,11 @@ main(int argc, char **argv)
         }
 
 #ifdef DEBUG
-        const clock_t begin = bclk();
-        srand(time(0)); /* required in order to make random errors */
+        clock_t begin;
+        begin = bclk();
+        srand(begin); /* required in order to make random errors */
 #endif
+        
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
         passert(fd_file >= 0, "receiver.c :: open", -1);
@@ -384,19 +400,19 @@ main(int argc, char **argv)
 
         uint8_t pkgn = 0;
         uint8_t frag[MAX_PACKET_SIZE];
+        ssize_t rb, len;
+
         while (1) {
-                ssize_t rb;
                 rb = llread(fd, frag);
                 if (rb < 0)
                         continue;
 
-                ssize_t len;
                 switch (frag[0]) {
                 case DATA:
-                        if (frag[1] >= (pkgn % 255)) {
+                        if (frag[1] > (pkgn % 256)) {
                                 len = frag[2] * 256 + frag[3];
                                 write(fd_file, frag + 4, len);
-                                ++pkgn;
+                                pkgn++;
                         }
                         break;
                 case START:
@@ -412,9 +428,11 @@ main(int argc, char **argv)
 finish:
         llclose(fd);
         close(fd_file);
+
 #ifdef DEBUG
         eclk(&begin);
 #endif
+
         return 0;
 }
 ```
