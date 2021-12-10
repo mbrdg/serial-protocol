@@ -41,7 +41,7 @@ int llclose(int fd);
 ```
 
 ### 3.1 `int llopen(int port, const uint8_t addr)` { #llopen }
-Abre o canal de comunicações fornecendo o respetivo identificador. A aplicação deve fornecer o número associado à porta série e ainda um valor de modo a identificar de que "lado" da ligação se encontra. Os valores possíveis são `REVEIVER` e `TRANSMITTER` e estão definidos no ficheiro `protocol.h`:
+Abre o canal de comunicações fornecendo o respetivo identificador. A aplicação deve fornecer o número associado à porta série e ainda um valor de modo a identificar de que "lado" da ligação se encontra. Os valores possíveis são `RECEIVER` e `TRANSMITTER` e estão definidos no ficheiro `protocol.h`:
 
 ```c
 #define RECEIVER 0x01
@@ -159,7 +159,7 @@ recv_send_response(int fd, const uint8_t *buffer, const ssize_t len)
 ## 4. Protocolo de aplicação
 Como vimos na secção anterior, o protocolo da ligação de dados carateriza-se por estar mais a baixo no modelo *OSI* do que o protocolo da aplicação. Este protocolo é mais simples e recorre à *API* descrita em cima para transferir dados. 
 
-No nosso caso implementamos 2 aplicações que representam o recetor e o transmissor dos dados. Em ambos os programas a primeira ação a ser efetuada é a abertura do canal de comunicações com a chamada a [`llopen`](#llopen). Depois, ocorre uma divergência na lógica dos 2 programas. Comecemos pelo emissor, que envia um primeiro pacote de controlo com o valor `START` no campo de controlo e o tamanho do ficheiro, depois lê pequenos fragmentos do ficheirofornecido como argumento e envia os respetivos pacotes de dados finalizando com um pacote de controlo semelhante ao primeiro exceto no campo de controlo onde o valor é `STOP`. Este envio dos dados acontece com recurso a chamadas a [`llwrite`](#llwrite). Enquanto isso, do outro lado, o recetor vai lendo os pacotes de controlo e de informação e escrevendo-os no ficheiro fornecido como argumento do programa. Findo todo o processo de transmissão ambos os programas programas chamam a função [`llclose`](#llclose), libertam os recursos sobre a sua alçada e cessam a sua execução.
+No nosso caso implementamos 2 aplicações que representam o recetor e o transmissor dos dados. Em ambos os programas a primeira ação a ser efetuada é a abertura do canal de comunicações com a chamada a [`llopen`](#llopen). Depois, ocorre uma divergência na lógica dos 2 programas. Comecemos pelo emissor, que envia um primeiro pacote de controlo com o valor `START` no campo de controlo e o tamanho do ficheiro, depois lê pequenos fragmentos do ficheiro fornecido como argumento e envia os respetivos pacotes de dados finalizando com um pacote de controlo semelhante ao primeiro exceto no campo de controlo onde o valor é `STOP`. Este envio dos dados acontece com recurso a chamadas a [`llwrite`](#llwrite). Enquanto isso, do outro lado, o recetor vai lendo os pacotes de controlo e de informação e escrevendo-os no ficheiro fornecido como argumento do programa. Findo todo o processo de transmissão ambos os programas programas chamam a função [`llclose`](#llclose), libertam os recursos sobre a sua alçada e cessam a sua execução.
 
 ## 5. Validação 
 
@@ -243,6 +243,7 @@ Agora, em retrospetiva, verificamos que com este pequeno projeto foi possível c
  */
 
 #ifndef _APPLICATION_H_
+#define _APPLICATION_H_
 
 /* Control command for application packets */
 typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;
@@ -259,7 +260,7 @@ typedef enum { SIZE, NAME } paramCmd;
  * sender.c
  * Serial port protocol sender application
  * RC @ L.EIC 2122
- * Authors: Miguel Rodrigues & Nuno Castro
+ * authors: Miguel rodrigues & Nuno castro
  */
 
 #include <sys/stat.h>
@@ -280,7 +281,9 @@ main (int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
-
+#ifdef debug
+        const clock_t begin = bclk();
+#endif
         int fd_file;
         fd_file = open(argv[2], O_RDONLY);
         passert(fd_file >= 0, "sender.c :: open", -1);
@@ -332,7 +335,9 @@ main (int argc, char **argv)
 
         llclose(fd);
         close(fd_file);
-
+#ifdef debug
+        eclk(&begin);
+#endif
         return 0;
 }
 ```
@@ -364,8 +369,10 @@ main(int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
+
 #ifdef DEBUG
-        srand(time(0));
+        const clock_t begin = bclk();
+        srand(time(0)); /* required in order to make random errors */
 #endif
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
@@ -395,7 +402,7 @@ main(int argc, char **argv)
                 case START:
                         break;
                 case STOP:
-                        llread(fd, frag);   /* Take the last disc frame */
+                        llread(fd, frag); /* Take the last disc frame */
                         goto finish;
                 default:
                         break;
@@ -405,6 +412,9 @@ main(int argc, char **argv)
 finish:
         llclose(fd);
         close(fd_file);
+#ifdef DEBUG
+        eclk(&begin);
+#endif
         return 0;
 }
 ```
@@ -422,6 +432,7 @@ finish:
  */
 
 #ifndef _PROTOCOL_H_
+#define _PROTOCOL_H_
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1008,12 +1019,14 @@ llclose(int fd)
  */
 
 #ifndef _UTILS_H_
+#define _UTILS_H_
 
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /***
  * Writes a message to stdout
@@ -1037,6 +1050,18 @@ void perr(const char *format, ...);
  */
 void passert(const int cond, const char *msg, const int code);
 
+/***
+ * Begins a clock
+ * @param const clock_t[out] - clock's current timestamp
+ */
+const clock_t bclk(void);
+
+/***
+ * Finishes a clock 
+ * @param const clock_t *[in] - clock's begin timestamp
+ */
+void eclk(const clock_t *start);
+
 #endif /* _UTILS_H_ */
 ```
 
@@ -1056,6 +1081,7 @@ void passert(const int cond, const char *msg, const int code);
 void 
 plog(const char *fmt, ...)
 {
+        fprintf(stdout, "log: ");
         va_list args;
 
         va_start(args, fmt);
@@ -1066,6 +1092,7 @@ plog(const char *fmt, ...)
 void
 perr(const char *fmt, ...)
 {
+        fprintf(stderr, "err: ");
         va_list args;
 
         va_start(args, fmt);
@@ -1080,6 +1107,24 @@ passert(const int cond, const char *msg, const int code)
                 fprintf(stderr, "die: %s :: %s\n", msg, strerror(errno));
                 exit(code);
         }
+}
+
+
+const clock_t
+bclk(void) 
+{
+        plog("clock: began\n");
+        const clock_t start = clock();
+        return start;
+}
+
+void 
+eclk(const clock_t *start)
+{
+        clock_t end = clock();
+        double elapsed = (double)(end - *start) * 1000.0 / CLOCKS_PER_SEC;
+        plog("clock: ended\n");
+        plog("clock: took %.5f ms\n", elapsed);
 }
 ```
 

@@ -22,8 +22,10 @@ main(int argc, char **argv)
                 fprintf(stderr, "usage: %s <port> <filename>\n", argv[0]);
                 return 1;
         }
+
 #ifdef DEBUG
-        srand(time(0)); /* nedeed to make random errors */
+        const clock_t begin = bclk();
+        srand(time(0)); /* required in order to make random errors */
 #endif
         int fd_file;
         fd_file = open(argv[2], O_CREAT | O_WRONLY, 0666);
@@ -63,6 +65,9 @@ main(int argc, char **argv)
 finish:
         llclose(fd);
         close(fd_file);
+#ifdef DEBUG
+        eclk(&begin);
+#endif
         return 0;
 }
 

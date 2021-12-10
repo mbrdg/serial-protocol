@@ -6,6 +6,7 @@
  */
 
 #ifndef _APPLICATION_H_
+#define _APPLICATION_H_
 
 /* Control command for application packets */
 typedef enum { DUMMY, DATA, START, STOP } ctrlCmd;

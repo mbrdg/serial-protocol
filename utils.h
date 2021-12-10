@@ -6,12 +6,14 @@
  */
 
 #ifndef _UTILS_H_
+#define _UTILS_H_
 
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /***
  * Writes a message to stdout
@@ -34,6 +36,18 @@ void perr(const char *format, ...);
  * @param const int[in] - program's exit code
  */
 void passert(const int cond, const char *msg, const int code);
+
+/***
+ * Begins a clock
+ * @param const clock_t[out] - clock's current timestamp
+ */
+const clock_t bclk(void);
+
+/***
+ * Finishes a clock 
+ * @param const clock_t *[in] - clock's begin timestamp
+ */
+void eclk(const clock_t *start);
 
 #endif /* _UTILS_H_ */
 
