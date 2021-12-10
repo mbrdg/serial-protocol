@@ -228,7 +228,7 @@ O gráfico seguinte mostra os tempos de envio do ficheiro fornecido `pinguim.gif
 
 ![Tempos de envio de acordo com o tamanho dos pacotes](./doc/benchmarks.png)
 
-Como se observa, existe um valor mínimo para os tempos de envio que ronda os 256 *bytes*. Isto significa, que o protocolo a eficiência do protocolo começa a cair com pacotes maiores. Podemos então assim concluir que se para pacotes mais pequenos o número de fragmentos a enviar causa um acréscimo ao tempo de envio, por outro lado, para pacotes maior o maior esforço de processamento abafa a suposta rapidez obtida de um menor número de envios de fragmentos. 
+Como se observa, existe um valor mínimo para os tempos de envio que ronda os 256 *bytes*. Podemos então assim concluir que se para pacotes mais pequenos o número de fragmentos a enviar causa um acréscimo ao tempo de envio, por outro lado, para pacotes maiores, o esforço de processamento abafa a suposta rapidez obtida de um menor número de envios de fragmentos. 
 
 ## 7. Conclusões
 
