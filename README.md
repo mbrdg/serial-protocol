@@ -197,14 +197,14 @@ Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que 
 
 Deste modo, os valores de eficiência para *Stop & Wait* são dados pelas seguintes fórmulas, disponíveis nos diapositivos apresentados nas aulas teóricas:
 
-![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Cbegin%7Balign%2A%7D%0Aa+%3D+%5Cfrac%7BT_%7Bprop%7D%7D%7BT_f%7D%0A%5Cend%7Balign%2A%7D%0A "Razão entre o tempo de propagação e o tempo de envio dos dados de um trama")\\
-![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S+%3D+%5Cfrac%7BT_f%7D%7BT_f%2B2T_%7Bprop%7D%7D+%3D+%5Cfrac%7B1%7D%7B1%2B2a%7D%0A "Eficiência do protocolo sem quaisquer erros")\\
+![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Cbegin%7Balign%2A%7D%0Aa+%3D+%5Cfrac%7BT_%7Bprop%7D%7D%7BT_f%7D%0A%5Cend%7Balign%2A%7D%0A "Razão entre o tempo de propagação e o tempo de envio dos dados de um trama")<br>
+![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S+%3D+%5Cfrac%7BT_f%7D%7BT_f%2B2T_%7Bprop%7D%7D+%3D+%5Cfrac%7B1%7D%7B1%2B2a%7D%0A "Eficiência do protocolo sem quaisquer erros")<br>
 ![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S_%7Be%7D+%3D+%5Cfrac%7BT_f%7D%7BE%5BA%5D%28T_f%2B2T_%7Bprop%7D%29%7D+%3D+%5Cfrac%7B1%7D%7BE%5BA%5D%281%2B2a%29%7D+%3D+%5Cfrac%7B1-FER%7D%7B1%2B2a%7D%0A "Eficiência do protocolo com erros")
 
 Onde:
 
-* *T~f~*: tempo entre envio de dados de uma trama;
-* *T~prop~*: tempo de propagação de uma trama ao longo do canal de comunicações;
+* *Tf*: tempo entre envio de dados de uma trama;
+* *Tprop*: tempo de propagação de uma trama ao longo do canal de comunicações;
 * *FER*: probabilidade de erro de uma trama (*Frame Error Ratio*);
 * *E[A]*: número médio de tentativas para se transmitir uma trama com sucesso.
 
