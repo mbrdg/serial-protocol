@@ -37,7 +37,7 @@ ssize_t llread(int fd, uint8_t *buffer);
 int llclose(int fd);
 ```
 
-### 3.1 *int llopen(int port, const uint8_t addr)*
+### 3.1 `int llopen(int port, const uint8_t addr)`
 Abre o canal de comunicações fornecendo o respetivo identificador. A aplicação deve fornecer o número associado à porta série e ainda um valor de modo a identificar de que "lado" da ligação se encontra. Os valores possíveis são `RECEIVER` e `TRANSMITTER` e estão definidos no ficheiro `protocol.h`:
 
 ```c
@@ -45,13 +45,13 @@ Abre o canal de comunicações fornecendo o respetivo identificador. A aplicaç�
 #define TRANSMITTER 0x03
 ```
 
-### 3.2 *ssize_t llwrite(int fd, uint8_t *buffer, ssize_t len)*
+### 3.2 `ssize_t llwrite(int fd, uint8_t *buffer, ssize_t len)`
 Escreve os dados contidos no `buffer` no canal de comunicações. Retorna o número de *bytes* escritos no canal, ou então um valor negativo em caso de erro.
 
-### 3.3 *ssize_t llread(int fd, uint8_t *buffer)*
+### 3.3 `ssize_t llread(int fd, uint8_t *buffer)`
 Lê os dados disponíveis no canal de comunicações, escrevendo-os no `buffer` passado como argumento. Retorna o valor de *bytes* lidos, ou então um valor negativo em caso de erro.
 
-### 3.4 *int llclose(int fd)*
+### 3.4 `int llclose(int fd)`
 Fecha o canal de comunicações.
 
 ### 3.5 Opções
