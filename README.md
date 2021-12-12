@@ -1,7 +1,5 @@
 # Redes de Computadores - Ligação de dados
 
-[[_TOC_]]
-
 ## Sumário
 Este projeto foi desenvolvido no âmbito da unidade curricular de Redes de Computadores e visa a implemetação de um protocolo de ligação de dados e testando-o com uma aplicação de transferência de ficheiros.
 
@@ -20,12 +18,12 @@ No que concerne à estrutura dos ficheiros, esta é muito simples. Os ficheiros 
 Para utilizar os 2 programas basta executar um dos seguintes comandos, de acordo com o fluxo de transmissão, em cada um dos dispositivos:
 
 * Para o recetor
-```sh 
+``` 
 $ recv <num. da porta> <nome do ficheiro a receber>
 ```
 
 * Para o recetor
-```sh
+```
 $ sndr <num. da porta> <nome do ficheiro a enviar>
 ```
 
@@ -39,7 +37,7 @@ ssize_t llread(int fd, uint8_t *buffer);
 int llclose(int fd);
 ```
 
-### 3.1 `int llopen(int port, const uint8_t addr)`
+### 3.1 *int llopen(int port, const uint8_t addr)*
 Abre o canal de comunicações fornecendo o respetivo identificador. A aplicação deve fornecer o número associado à porta série e ainda um valor de modo a identificar de que "lado" da ligação se encontra. Os valores possíveis são `RECEIVER` e `TRANSMITTER` e estão definidos no ficheiro `protocol.h`:
 
 ```c
@@ -47,13 +45,13 @@ Abre o canal de comunicações fornecendo o respetivo identificador. A aplicaç�
 #define TRANSMITTER 0x03
 ```
 
-### 3.2 `ssize_t llwrite(int fd, uint8_t *buffer, ssize_t len)`
+### 3.2 *ssize_t llwrite(int fd, uint8_t *buffer, ssize_t len)*
 Escreve os dados contidos no `buffer` no canal de comunicações. Retorna o número de *bytes* escritos no canal, ou então um valor negativo em caso de erro.
 
-### 3.3 `ssize_t llread(int fd, uint8_t *buffer)`
+### 3.3 *ssize_t llread(int fd, uint8_t *buffer)*
 Lê os dados disponíveis no canal de comunicações, escrevendo-os no `buffer` passado como argumento. Retorna o valor de *bytes* lidos, ou então um valor negativo em caso de erro.
 
-### 3.4 `int llclose(int fd)`
+### 3.4 *int llclose(int fd)*
 Fecha o canal de comunicações.
 
 ### 3.5 Opções
@@ -199,20 +197,20 @@ Contudo, a facilidade de implementação de um sistema *Stop & Wait* impede que 
 
 Deste modo, os valores de eficiência para *Stop & Wait* são dados pelas seguintes fórmulas, disponíveis nos diapositivos apresentados nas aulas teóricas:
 
-![Razão entre o tempo de propagação e o tempo de envio dos dados de um trama](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Cbegin%7Balign%2A%7D%0Aa+%3D+%5Cfrac%7BT_%7Bprop%7D%7D%7BT_f%7D%0A%5Cend%7Balign%2A%7D%0A)
-![Eficiência do protocolo sem quaisquer erros](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S+%3D+%5Cfrac%7BT_f%7D%7BT_f%2B2T_%7Bprop%7D%7D+%3D+%5Cfrac%7B1%7D%7B1%2B2a%7D%0A)
-![Eficiência do protocolo com erros](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S_%7Be%7D+%3D+%5Cfrac%7BT_f%7D%7BE%5BA%5D%28T_f%2B2T_%7Bprop%7D%29%7D+%3D+%5Cfrac%7B1%7D%7BE%5BA%5D%281%2B2a%29%7D+%3D+%5Cfrac%7B1-FER%7D%7B1%2B2a%7D%0A)
+![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+%5Cbegin%7Balign%2A%7D%0Aa+%3D+%5Cfrac%7BT_%7Bprop%7D%7D%7BT_f%7D%0A%5Cend%7Balign%2A%7D%0A "Razão entre o tempo de propagação e o tempo de envio dos dados de um trama")\\
+![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S+%3D+%5Cfrac%7BT_f%7D%7BT_f%2B2T_%7Bprop%7D%7D+%3D+%5Cfrac%7B1%7D%7B1%2B2a%7D%0A "Eficiência do protocolo sem quaisquer erros")\\
+![](https://render.githubusercontent.com/render/math?math=%5Cdisplaystyle+S_%7Be%7D+%3D+%5Cfrac%7BT_f%7D%7BE%5BA%5D%28T_f%2B2T_%7Bprop%7D%29%7D+%3D+%5Cfrac%7B1%7D%7BE%5BA%5D%281%2B2a%29%7D+%3D+%5Cfrac%7B1-FER%7D%7B1%2B2a%7D%0A "Eficiência do protocolo com erros")
 
 Onde:
 
-* *T<sub>f</sub>*: tempo entre envio de dados de uma trama;
-* *T<sub>prop</sub>*: tempo de propagação de uma trama ao longo do canal de comunicações;
+* *T~f~*: tempo entre envio de dados de uma trama;
+* *T~prop~*: tempo de propagação de uma trama ao longo do canal de comunicações;
 * *FER*: probabilidade de erro de uma trama (*Frame Error Ratio*);
 * *E[A]*: número médio de tentativas para se transmitir uma trama com sucesso.
 
 Como se observa, surgem várias conclusões. A primeira é a de que se o valor de *a* for elevado, então, a eficiência será baixa. O principal motivo para que isto ocorra pode ser a distância entre os pontos de comunicação, bem como, o facto do tamanho da trama de informação não ser suficientemente grande - o que conduz a um tempo de envio menor, e consequentemente a um valor de *a* maior. Já a segunda conclusão a que chegamos é a de que se a probabilidade de uma trama conter erros - *FER* - for elevada, naturalmente, a eficiência do protocolo irá cair. A modelação dos valores da eficiência de acordo com a probabilidade de erro de uma trama pode ser observada no gráfico seguinte:
 
-![Valor da eficiência de acordo com o FER](./doc/efficiency.png)
+![](./doc/efficiency.png "Valor da eficiência de acordo com o FER")
 
 Neste gráfico, importa referir que o cenário representado pela linha púrpura é hipotético, na medida, em que todas as tramas possuem erros o que impossibilita a transferência da informação, resultado, obviamente, numa eficiência nula e constante. Por outro lado, percebe-se, pela análise do gráfico, que o valor de *a* tem a sua influência indepedentemente do valor de *FER*. Não obstante, nota-se também que para valores baixos de *a*, a eficiência depende praticamente do *FER*.
 
@@ -222,7 +220,7 @@ Tendo tudo isto em conta, a escolha de *Stop & Wait* para mecanismo de *ARQ* dev
 
 O gráfico seguinte mostra os tempos de envio do ficheiro fornecido `pinguim.gif` de acordo com o tamanho máximo para um pacote de dados da aplicação. Nota que este valor pode ser alterado nas [opções](#opcoes) do ficheiro `makefile`.
 
-![Tempos de envio de acordo com o tamanho dos pacotes](./doc/benchmarks.png)
+![](./doc/benchmarks.png "Tempos de envio de acordo com o tamanho dos pacotes")
 
 Como se observa, existe um valor mínimo para os tempos de envio que ronda os 256 *bytes*. Podemos então assim concluir que se para pacotes mais pequenos o número de fragmentos a enviar causa um acréscimo ao tempo de envio, por outro lado, para pacotes maiores, o esforço de processamento abafa a suposta rapidez obtida de um menor número de envios de fragmentos. 
 
