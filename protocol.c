@@ -295,7 +295,7 @@ decode_data(uint8_t *dest, const uint8_t *src, ssize_t len)
                 dec += IS_ESCAPE(src[i]);
 
         for (i = 0, j = 0; j < len - dec; i++, j++)
-            dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ KEY) : src[i];
+                dest[j] = IS_ESCAPE(src[i]) ? (src[++i] ^ KEY) : src[i];
 
         return len - dec;
 }
